@@ -1,0 +1,38 @@
+# This file contains metadata for your plugin. Since 
+# version 2.0 of QGIS this is the proper way to supply 
+# information about a plugin. The old method of 
+# embedding metadata in __init__.py is 
+# no longer supported since version 2.0.
+
+# This file should be included when you package your plugin.# Mandatory items:
+
+[general]
+name=Rangeland Tools
+qgisMinimumVersion=3.0
+description=A collection of processing scripts and GUI tools for rangeland analysis.
+version=1.0.2
+author=Ben Wirf
+email=ben.wirf@gmail.com
+
+about=A collection of processing scripts and GUI tools for rangeland analysis.
+
+tracker=https://github.com/benwirf/rangeland-tools/issues
+repository=https://github.com/benwirf/rangeland-tools
+# End of mandatory metadata
+
+# Recommended items:
+
+# Uncomment the following line and add your changelog:
+changelog=1.0.1 Initial release
+
+# Tags are comma separated with spaces allowed
+tags=python, processing, rangelands
+
+homepage=https://github.com/benwirf/rangeland-tools
+category=Analysis
+icon=ntg-logo.png
+# experimental flag
+experimental=True
+
+# deprecated flag (applies to the whole plugin, not just a single version)
+deprecated=False
