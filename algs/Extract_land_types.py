@@ -556,7 +556,7 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                             for a in lt_ft.attributes():
                                 pdk_5km_wa_lt_atts.append(a)
                             pdk_5km_wa_area_atts = self.returnLandTypeAttributesForGeometry(pdk_5km_wa_ix,
-                                                                                    pdk_3km_wa_geom,
+                                                                                    pdk_5km_wa_geom,
                                                                                     paddock_land_types_temp.sourceCrs(),
                                                                                     area_method,
                                                                                     context=context)
