@@ -135,7 +135,7 @@ class TSDMSummary(QgsProcessingAlgorithm):
                 'MASK':temp_districts,
                 'SOURCE_CRS':None,
                 'TARGET_CRS':None,
-                'NODATA':None,
+                'NODATA':-999,
                 'ALPHA_BAND':False,
                 'CROP_TO_CUTLINE':True,
                 'KEEP_RESOLUTION':False,
@@ -177,7 +177,7 @@ class TSDMSummary(QgsProcessingAlgorithm):
                 'MASK':temp_districts,
                 'SOURCE_CRS':None,
                 'TARGET_CRS':None,
-                'NODATA':None,
+                'NODATA':-999,
                 'ALPHA_BAND':False,
                 'CROP_TO_CUTLINE':True,
                 'KEEP_RESOLUTION':False,
@@ -186,7 +186,7 @@ class TSDMSummary(QgsProcessingAlgorithm):
                 'Y_RESOLUTION':None,
                 'MULTITHREADING':False,
                 'OPTIONS':'',
-                'DATA_TYPE':0,
+                'DATA_TYPE':6,
                 'EXTRA':'',
                 'OUTPUT':'TEMPORARY_OUTPUT'}
                 
@@ -232,27 +232,27 @@ class TSDMSummary(QgsProcessingAlgorithm):
     def tsdm_counts(self, raster, region):
         if region == 'northern':
             # Northern Districts
-            low_count = ((raster > 0)&(raster <= 1000)).sum()
+            low_count = ((raster >= 0)&(raster <= 1000)).sum()
             low_moderate_count = ((raster > 1000)&(raster <= 2000)).sum()
             moderate_count = ((raster > 2000)&(raster <= 3000)).sum()
             high_count = (raster > 3000).sum()
-            no_data_count = (raster == 0).sum()
+            #no_data_count = (raster == 0).sum()
 
         elif region == 'southern':
             # Southern Districts
-            low_count = ((raster > 0)&(raster <= 250)).sum()
+            low_count = ((raster >= 0)&(raster <= 250)).sum()
             low_moderate_count = ((raster > 250)&(raster <= 500)).sum()
             moderate_count = ((raster > 500)&(raster <= 1000)).sum()
             high_count = (raster > 1000).sum()
-            no_data_count = (raster == 0).sum()
+            #no_data_count = (raster == 0).sum()
 
-        total_pixel_count = sum([low_count, low_moderate_count, moderate_count, high_count, no_data_count])
-        total_pixel_count_greater_than_zero = sum([low_count, low_moderate_count, moderate_count, high_count])
+        #total_pixel_count = sum([low_count, low_moderate_count, moderate_count, high_count, no_data_count])
+        total_pixel_count = sum([low_count, low_moderate_count, moderate_count, high_count])
 
-        low_percent = low_count/total_pixel_count_greater_than_zero*100
-        low_moderate_percent = low_moderate_count/total_pixel_count_greater_than_zero*100
-        moderate_percent = moderate_count/total_pixel_count_greater_than_zero*100
-        high_percent = high_count/total_pixel_count_greater_than_zero*100
+        low_percent = low_count/total_pixel_count*100
+        low_moderate_percent = low_moderate_count/total_pixel_count*100
+        moderate_percent = moderate_count/total_pixel_count*100
+        high_percent = high_count/total_pixel_count*100
         
         check_sum = sum([low_percent, low_moderate_percent, moderate_percent, high_percent])
         
@@ -268,12 +268,12 @@ class TSDMSummary(QgsProcessingAlgorithm):
     
     
     def tsdm_percentile_counts(self, raster):
-        below_average_count = ((raster > 0)&(raster <= 30)).sum()
+        below_average_count = ((raster >= 0)&(raster <= 30)).sum()
         average_count = ((raster > 30)&(raster <= 70)).sum()
         above_average_count = ((raster > 70)&(raster <= 100)).sum()
         firescar_count = (raster == 253).sum()
         water_count = (raster == 254).sum()
-        no_data_count = (raster == 0).sum()
+        #no_data_count = (raster == 0).sum()
         
         total_tsdm_pcnt_classes = sum([below_average_count, average_count, above_average_count])
         

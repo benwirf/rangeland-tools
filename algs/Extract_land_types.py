@@ -207,7 +207,7 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
         output_layers = []
  
         source_land_types = self.parameterAsSource(parameters, self.LAND_TYPES, context)
-        output_fields = self.parameterAsFields(parameters, self.OUTPUT_FIELDS, context)
+        output_field_names = self.parameterAsFields(parameters, self.OUTPUT_FIELDS, context)
         unit_fields = self.parameterAsFields(parameters, self.UNIT_FIELD, context)
         source_paddocks = self.parameterAsSource(parameters, self.PADDOCKS, context)
         paddock_name_field = self.parameterAsFields(parameters, self.PADDOCK_NAME_FIELD, context)[0]
@@ -221,6 +221,13 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
         parsed_spreadsheet_params = self.parameterAsMatrix(parameters, self.OUTPUT_XLSX, context)
         export_spreadsheet = parsed_spreadsheet_params[0]# Boolean
         output_spreadsheet_path = parsed_spreadsheet_params[1]# String
+        
+        # Fields with these names will be added to all output layers and their values calculated
+        # unit_fields[0] is the field containing land unit/ land type names
+        STANDARD_ADDITIONAL_FIELD_NAMES = [unit_fields[0], 'Area_m2', 'Area_ha', 'Area_km2', 'Percent']
+        
+        # Run a check to see if any of the fields selected to be copied have the same name as any of our standard fields
+        output_fields = [fld_name for fld_name in output_field_names if fld_name not in STANDARD_ADDITIONAL_FIELD_NAMES]
         
         ###*******Calculate processing steps in advance*******###
         if dissolve_paddocks and len(watered_areas) == 2 and export_spreadsheet:
@@ -281,11 +288,11 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
         req = land_types_index.intersects(self.transformedGeom(all_pdks, source_paddocks.sourceCrs(), source_land_types.sourceCrs(), context.transformContext()).boundingBox())
         
         # Construct list of field indexes from output field names
-        output_field_indexes = [source_land_types.fields().lookupField(fld) for fld in output_fields]
+#        output_field_indexes = [source_land_types.fields().lookupField(fld) for fld in output_fields]
         
         # create temporary, transformed copy of land types with features intersecting property bounding box
         # We also filter land type attributes to selected output fields by chaining method calls
-        local_land_types_projected = source_land_types.materialize(QgsFeatureRequest(req).setSubsetOfAttributes(output_field_indexes).setDestinationCrs(dest_crs, context.transformContext()))
+        local_land_types_projected = source_land_types.materialize(QgsFeatureRequest(req).setDestinationCrs(dest_crs, context.transformContext()))
         
         feedback.setCurrentStep(current_step)
         current_step+=1
@@ -308,6 +315,7 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
             all_pdks_projected = self.transformedGeom(all_pdks, src_crs, dest_crs, context.transformContext()).makeValid()
             plt_path = os.path.join(output_folder, f'Property_land_types.{self.FORMATS[output_format]}')
             property_land_types_temp = QgsVectorLayer(f'Polygon?crs={dest_crs.authid()}', 'Property_land_types', 'memory')
+            property_land_types_temp.dataProvider().addAttributes([QgsField(unit_fields[0], QVariant.String)])
             property_land_types_temp.dataProvider().addAttributes([fld for fld in source_land_types.fields() if fld.name() in output_fields])
             property_land_types_temp.dataProvider().addAttributes([QgsField('Area_m2', QVariant.Double, prec=3),
                                                                     QgsField('Area_ha', QVariant.Double, prec=3),
@@ -319,7 +327,10 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                     prop_ix = ft.geometry().intersection(all_pdks_projected)
                     prop_lt_feat = QgsFeature(property_land_types_temp.fields())
                     prop_lt_feat.setGeometry(prop_ix)
-                    prop_atts = ft.attributes()
+#                    prop_atts = ft.attributes()
+                    prop_atts = [ft[unit_fields[0]]]
+                    for fld in output_fields:
+                        prop_atts.append(ft[fld])
                     prop_area_atts = self.returnLandTypeAttributesForGeometry(prop_ix,
                                                                                 all_pdks_projected,
                                                                                 property_land_types_temp.sourceCrs(),
@@ -351,7 +362,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
         # Extract land types and calculate areas for each paddock
         pdk_lt_path = os.path.join(output_folder, f'Paddock_land_types.{self.FORMATS[output_format]}')
         paddock_land_types_temp = QgsVectorLayer(f'Polygon?crs={dest_crs.authid()}', 'Paddock_land_types', 'memory')
-        paddock_land_types_temp.dataProvider().addAttributes([QgsField('Paddock', QVariant.String)])
+        paddock_land_types_temp.dataProvider().addAttributes([QgsField('Paddock', QVariant.String),
+                                                                QgsField(unit_fields[0], QVariant.String)])
         paddock_land_types_temp.dataProvider().addAttributes([fld for fld in source_land_types.fields() if fld.name() in output_fields])
         paddock_land_types_temp.dataProvider().addAttributes([QgsField('Area_m2', QVariant.Double, prec=3),
                                                                 QgsField('Area_ha', QVariant.Double, prec=3),
@@ -367,8 +379,9 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                     pdk_lt_feat = QgsFeature(paddock_land_types_temp.fields())
                     pdk_lt_feat.setGeometry(pdk_ix)
                     pdk_lt_atts = ['Un-named paddock' if pdk_ft[paddock_name_field] == NULL else pdk_ft[paddock_name_field]]#*************
-                    for a in lt_ft.attributes():
-                        pdk_lt_atts.append(a)
+                    pdk_lt_atts.append(lt_ft[unit_fields[0]])
+                    for fld in output_fields:
+                        pdk_lt_atts.append(lt_ft[fld])
                     pdk_area_atts = self.returnLandTypeAttributesForGeometry(pdk_ix,
                                                                             pdk_geom,
                                                                             paddock_land_types_temp.sourceCrs(),
@@ -416,7 +429,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                 #-- and calculate the areas and add a feature to the temp output layer
                 pdk_3k_wa_lt_path = os.path.join(output_folder, f'Paddock_3km_WA_land_types.{self.FORMATS[output_format]}')
                 pdk_3k_wa_land_types_temp = QgsVectorLayer(f'Polygon?crs={dest_crs.authid()}', 'Paddock_3km_WA_land_types', 'memory')
-                pdk_3k_wa_land_types_temp.dataProvider().addAttributes([QgsField('Paddock', QVariant.String)])
+                pdk_3k_wa_land_types_temp.dataProvider().addAttributes([QgsField('Paddock', QVariant.String),
+                                                                        QgsField(unit_fields[0], QVariant.String)])
                 pdk_3k_wa_land_types_temp.dataProvider().addAttributes([fld for fld in source_land_types.fields() if fld.name() in output_fields])
                 pdk_3k_wa_land_types_temp.dataProvider().addAttributes([QgsField('Area_m2', QVariant.Double, prec=3),
                                                                         QgsField('Area_ha', QVariant.Double, prec=3),
@@ -443,8 +457,9 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                             pdk_3km_wa_lt_feat = QgsFeature(pdk_3k_wa_land_types_temp.fields())
                             pdk_3km_wa_lt_feat.setGeometry(pdk_3km_wa_ix)
                             pdk_3km_wa_lt_atts = ['Un-named paddock' if pdk_ft[paddock_name_field] == NULL else pdk_ft[paddock_name_field]]
-                            for a in lt_ft.attributes():
-                                pdk_3km_wa_lt_atts.append(a)
+                            pdk_3km_wa_lt_atts.append(lt_ft[unit_fields[0]])
+                            for fld in output_fields:
+                                pdk_3km_wa_lt_atts.append(lt_ft[fld])
                             pdk_3km_wa_area_atts = self.returnLandTypeAttributesForGeometry(pdk_3km_wa_ix,
                                                                                     pdk_3km_wa_geom,
                                                                                     paddock_land_types_temp.sourceCrs(),
@@ -478,6 +493,7 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                 if dissolve_paddocks:
                     prop_3k_wa_lt_path = os.path.join(output_folder, f'Property_3km_WA_land_types.{self.FORMATS[output_format]}')
                     prop_3k_wa_land_types_temp = QgsVectorLayer(f'Polygon?crs={dest_crs.authid()}', 'Property_3km_WA_land_types', 'memory')
+                    prop_3k_wa_land_types_temp.dataProvider().addAttributes([QgsField(unit_fields[0], QVariant.String)])
                     prop_3k_wa_land_types_temp.dataProvider().addAttributes([fld for fld in source_land_types.fields() if fld.name() in output_fields])
                     prop_3k_wa_land_types_temp.dataProvider().addAttributes([QgsField('Area_m2', QVariant.Double, prec=3),
                                                                             QgsField('Area_ha', QVariant.Double, prec=3),
@@ -491,7 +507,11 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                             prop_3k_wa_land_types_ix = lt_ft.geometry().intersection(property_3km_watered_area_geom)
                             prop_3k_wa_lt_feat = QgsFeature(prop_3k_wa_land_types_temp.fields())
                             prop_3k_wa_lt_feat.setGeometry(prop_3k_wa_land_types_ix)
-                            prop_3k_wa_atts = lt_ft.attributes()
+                            #***********!!!!!!!!!!!!!!!!!!
+                            prop_3k_wa_atts = [lt_ft[unit_fields[0]]]
+                            for fld in output_fields:
+                                prop_3k_wa_atts.append(lt_ft[fld])
+                            #***********!!!!!!!!!!!!!!!!!!
                             prop_3k_wa_area_atts = self.returnLandTypeAttributesForGeometry(prop_3k_wa_land_types_ix,
                                                                                         property_3km_watered_area_geom,
                                                                                         prop_3k_wa_land_types_temp.sourceCrs(),
@@ -526,7 +546,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                 # User wants 5km watered area land types
                 pdk_5k_wa_lt_path = os.path.join(output_folder, f'Paddock_5km_WA_land_types.{self.FORMATS[output_format]}')
                 pdk_5k_wa_land_types_temp = QgsVectorLayer(f'Polygon?crs={dest_crs.authid()}', 'Paddock_5km_WA_land_types', 'memory')
-                pdk_5k_wa_land_types_temp.dataProvider().addAttributes([QgsField('Paddock', QVariant.String)])
+                pdk_5k_wa_land_types_temp.dataProvider().addAttributes([QgsField('Paddock', QVariant.String),
+                                                                        QgsField(unit_fields[0], QVariant.String)])
                 pdk_5k_wa_land_types_temp.dataProvider().addAttributes([fld for fld in source_land_types.fields() if fld.name() in output_fields])
                 pdk_5k_wa_land_types_temp.dataProvider().addAttributes([QgsField('Area_m2', QVariant.Double, prec=3),
                                                                         QgsField('Area_ha', QVariant.Double, prec=3),
@@ -553,8 +574,9 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                             pdk_5km_wa_lt_feat = QgsFeature(pdk_5k_wa_land_types_temp.fields())
                             pdk_5km_wa_lt_feat.setGeometry(pdk_5km_wa_ix)
                             pdk_5km_wa_lt_atts = ['Un-named paddock' if pdk_ft[paddock_name_field] == NULL else pdk_ft[paddock_name_field]]
-                            for a in lt_ft.attributes():
-                                pdk_5km_wa_lt_atts.append(a)
+                            pdk_5km_wa_lt_atts.append(lt_ft[unit_fields[0]])
+                            for fld in output_fields:
+                                pdk_5km_wa_lt_atts.append(lt_ft[fld])
                             pdk_5km_wa_area_atts = self.returnLandTypeAttributesForGeometry(pdk_5km_wa_ix,
                                                                                     pdk_5km_wa_geom,
                                                                                     paddock_land_types_temp.sourceCrs(),
@@ -588,6 +610,7 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                 if dissolve_paddocks:
                     prop_5k_wa_lt_path = os.path.join(output_folder, f'Property_5km_WA_land_types.{self.FORMATS[output_format]}')
                     prop_5k_wa_land_types_temp = QgsVectorLayer(f'Polygon?crs={dest_crs.authid()}', 'Property_5km_WA_land_types', 'memory')
+                    prop_5k_wa_land_types_temp.dataProvider().addAttributes([QgsField(unit_fields[0], QVariant.String)])
                     prop_5k_wa_land_types_temp.dataProvider().addAttributes([fld for fld in source_land_types.fields() if fld.name() in output_fields])
                     prop_5k_wa_land_types_temp.dataProvider().addAttributes([QgsField('Area_m2', QVariant.Double, prec=3),
                                                                             QgsField('Area_ha', QVariant.Double, prec=3),
@@ -601,7 +624,9 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                             prop_5k_wa_land_types_ix = lt_ft.geometry().intersection(property_5km_watered_area_geom)
                             prop_5k_wa_lt_feat = QgsFeature(prop_5k_wa_land_types_temp.fields())
                             prop_5k_wa_lt_feat.setGeometry(prop_5k_wa_land_types_ix)
-                            prop_5k_wa_atts = lt_ft.attributes()
+                            prop_5k_wa_atts = [lt_ft[unit_fields[0]]]
+                            for fld_name in output_fields:
+                                prop_5k_wa_atts.append(lt_ft[fld_name])
                             prop_5k_wa_area_atts = self.returnLandTypeAttributesForGeometry(prop_5k_wa_land_types_ix,
                                                                                         property_5km_watered_area_geom,
                                                                                         prop_5k_wa_land_types_temp.sourceCrs(),

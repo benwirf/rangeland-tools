@@ -30,21 +30,34 @@ __copyright__ = '(C) 2023 by Ben Wirf'
 __revision__ = '$Format:%H$'
 
 import os
+import sys
+
 from qgis.PyQt.QtGui import QIcon
 from qgis.core import QgsProcessingProvider
-from .algs.Clip_rasters_by_pastoral_district import ClipRastersByPastoralDistrict
-from .algs.Fire_risk_summary import FireRiskSummary
-from .algs.Pasture_growth_graphs import PastureGrowthGraphs
-from .algs.Pasture_growth_spreadsheet import PastureGrowthSpreadsheet
-from .algs.Percentage_burnt_by_district import PercentBurntByDistrict
-from .algs.Total_growth_summary import TotalGrowthSummary
-from .algs.TSDM_summary import TSDMSummary
-from .algs.Paddock_watered_areas import PaddockWateredAreas
-from .algs.Max_dist_to_water import MaxDistToWater
-from .algs.Add_layout_table import AddLayoutTable
-from .algs.Extract_land_types import ExtractLandTypes
-from .algs.Relative_growth_summary import RelativeGrowthSummary
-from .algs.Distance_to_water_bands import DistanceToWaterBands
+
+sys.path.append(os.path.join(os.path.dirname(__file__), 'algs'))
+
+from Clip_rasters_by_pastoral_district import ClipRastersByPastoralDistrict
+from Fire_risk_summary import FireRiskSummary
+from Pasture_growth_graphs import PastureGrowthGraphs
+from Pasture_growth_spreadsheet import PastureGrowthSpreadsheet
+from Percentage_burnt_by_district import PercentBurntByDistrict
+from Total_growth_summary import TotalGrowthSummary
+from TSDM_summary import TSDMSummary
+from Paddock_watered_areas import PaddockWateredAreas
+from Max_dist_to_water import MaxDistToWater
+from Add_layout_table import AddLayoutTable
+from Extract_land_types import ExtractLandTypes
+from Relative_growth_summary import RelativeGrowthSummary
+from Distance_to_water_bands import DistanceToWaterBands
+from Carrying_capacity_summary import CarryingCapacitySummary
+from Batch_clip_points import BatchClipPoints
+from Add_date_field import AddDateField
+from Add_datetime_field import AddDateTimeField
+from Daily_movement_stats import DailyMovementStats
+from Daily_movement_summary import DailyMovementSummary
+from Add_dist_to_water_attribute import AddDistanceToWaterAttribute
+from Add_land_type_attribute import AddLandTypeAttribute
 
 iconPath = os.path.dirname(__file__)
 
@@ -85,7 +98,15 @@ class RangelandToolsProvider(QgsProcessingProvider):
                         AddLayoutTable(),
                         ExtractLandTypes(),
                         RelativeGrowthSummary(),
-                        DistanceToWaterBands()]
+                        DistanceToWaterBands(),
+                        CarryingCapacitySummary(),
+                        BatchClipPoints(),
+                        AddDateField(),
+                        AddDateTimeField(),
+                        DailyMovementStats(),
+                        DailyMovementSummary(),
+                        AddDistanceToWaterAttribute(),
+                        AddLandTypeAttribute()]
 
         for alg in self.alglist:
             self.addAlgorithm(alg)

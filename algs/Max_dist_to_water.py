@@ -428,5 +428,7 @@ class MaxDistToWater(QgsProcessingAlgorithm):
                         group1.insertLayer(0, lyr)
                         
             self.LAYERS_TO_LOAD.clear()
+            
+            return {}
                             
 ##############################################################################

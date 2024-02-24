@@ -211,14 +211,24 @@ class RelativeGrowthSummary(QgsProcessingAlgorithm):
                                         well_above_average_count,
                                         extremely_high_count])
         
-        # get each category as a percentage of the total
-        extremely_low_pcnt = extremely_low_count/total_valid_pixel_count*100
-        well_below_average_pcnt = well_below_average_count/total_valid_pixel_count*100
-        below_average_pcnt = below_average_count/total_valid_pixel_count*100
-        average_pcnt = average_count/total_valid_pixel_count*100
-        above_average_pcnt = above_average_count/total_valid_pixel_count*100
-        well_above_average_pcnt = well_above_average_count/total_valid_pixel_count*100
-        extremely_high_pcnt = extremely_high_count/total_valid_pixel_count*100
+        if total_valid_pixel_count == 0:
+            extremely_low_pcnt = 0
+            well_below_average_pcnt = 0
+            below_average_pcnt = 0
+            average_pcnt = 0
+            above_average_pcnt = 0
+            well_above_average_pcnt = 0
+            extremely_high_pcnt = 0 
+        
+        else:
+            # get each category as a percentage of the total
+            extremely_low_pcnt = extremely_low_count/total_valid_pixel_count*100
+            well_below_average_pcnt = well_below_average_count/total_valid_pixel_count*100
+            below_average_pcnt = below_average_count/total_valid_pixel_count*100
+            average_pcnt = average_count/total_valid_pixel_count*100
+            above_average_pcnt = above_average_count/total_valid_pixel_count*100
+            well_above_average_pcnt = well_above_average_count/total_valid_pixel_count*100
+            extremely_high_pcnt = extremely_high_count/total_valid_pixel_count*100
         
         # check that sum of percentages add up to 100
         percent_check_sum = sum([extremely_low_pcnt,

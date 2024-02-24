@@ -9,18 +9,20 @@ from qgis.PyQt.QtGui import (QIcon, QCursor, QColor)
 
 from qgis.core import (QgsProject, QgsFieldProxyModel, QgsMapLayerProxyModel,
                         QgsVectorLayer, QgsField, QgsGeometry, QgsFeature,
-                        QgsCoordinateTransform, QgsFeatureRequest,
-                        QgsCoordinateReferenceSystem)
+                        QgsCoordinateTransform, QgsFeatureRequest, QgsProject,
+                        QgsCoordinateReferenceSystem, QgsApplication,
+                        QgsRectangle, QgsCoordinateTransform, QgsWkbTypes)
                         
 from qgis.gui import (QgsMapLayerComboBox, QgsFieldComboBox, QgsMapCanvas,
-                        QgsFileWidget, QgsMapToolPan, QgsMapTool)
+                        QgsFileWidget, QgsMapToolPan, QgsMapTool,
+                        QgsRubberBand)
 
 import processing
 import os
 
 class CustomWateredAreasWidget(QWidget):
     
-    def __init__(self, parent):
+    def __init__(self, parent=None):
         super(CustomWateredAreasWidget, self).__init__()
         self.parent = parent
         # self.setGeometry(200, 100, 850, 550)
@@ -40,6 +42,8 @@ class CustomWateredAreasWidget(QWidget):
         self.pdk_fld_lbl = QLabel('Field containing paddock names:', self)
         self.pdk_fld_cb = QgsFieldComboBox(self)
         self.pdk_fld_cb.setFilters(QgsFieldProxyModel.String)
+        self.pdk_fld_cb.fieldChanged.connect(self.paddock_name_field_changed)
+        
         # Waterpoint layer input widgets
         self.waterpoint_lbl = QLabel('Water point layer:', self)
         self.waterpoint_mlcb = QgsMapLayerComboBox(self)
@@ -47,6 +51,7 @@ class CustomWateredAreasWidget(QWidget):
         self.wp_fld_lbl = QLabel('Field containing waterpoint names:', self)
         self.wp_fld_cb = QgsFieldComboBox(self)
         self.wp_fld_cb.setFilters(QgsFieldProxyModel.String)
+        self.wp_fld_cb.fieldChanged.connect(self.waterpoint_name_field_changed)
 
         self.input_layers_layout.addRow(self.pdk_lbl, self.pdk_layer_mlcb)
         self.input_layers_layout.addRow(self.pdk_fld_lbl, self.pdk_fld_cb)
@@ -149,7 +154,70 @@ class CustomWateredAreasWidget(QWidget):
         
         self.select_tool = SelectTool(self.canvas, self.pdk_lyr, self.wp_lyr, parent=self)
         self.select_tool_conn = self.select_tool.deactivated.connect(self.set_pan_tool)
+    
+    #***************************************************************************25-01-2024
+    def paddock_name_field_changed(self, field_name):
+        if not self.tbl.rowCount():
+            return
+        if self.wa3km_lyr and self.wa5km_lyr:
+            wa_3km_fld_idx = self.wa3km_lyr.fields().lookupField('Pdk_Name')
+            wa_5km_fld_idx = self.wa5km_lyr.fields().lookupField('Pdk_Name')
+            wa_3km_att_map = {}
+            wa_5km_att_map = {}
+        for row in range(self.tbl.rowCount()):
+            item = self.tbl.item(row, 0)
+            item_data = item.data(Qt.DisplayRole)
+            pdk_id = int(item_data.split('(')[1].split(')')[0])
+            old_pdk_name = item_data.split('(')[1]
+            feat = self.pdk_lyr.getFeature(pdk_id)
+            feat_attribute = feat[field_name]
+            item.setData(Qt.DisplayRole, f'{feat_attribute}({pdk_id})')
+            if self.wa3km_lyr and self.wa5km_lyr:
+                for wa_3km_feat in [ft for ft in self.wa3km_lyr.getFeatures() if ft['Pdk_ID'] == pdk_id]:
+                    wa_3km_att_map[wa_3km_feat.id()] = {wa_3km_fld_idx: feat_attribute}
+                for wa_5km_feat in [ft for ft in self.wa5km_lyr.getFeatures() if ft['Pdk_ID'] == pdk_id]:
+                    wa_5km_att_map[wa_5km_feat.id()] = {wa_5km_fld_idx: feat_attribute}
+        if self.wa3km_lyr and self.wa5km_lyr:
+            self.wa3km_lyr.dataProvider().changeAttributeValues(wa_3km_att_map)
+            self.wa5km_lyr.dataProvider().changeAttributeValues(wa_5km_att_map)
+        self.tbl.resizeColumnToContents(0)
         
+    def waterpoint_name_field_changed(self, field_name):
+        if not self.tbl.rowCount():
+            return
+        if self.wa3km_lyr and self.wa5km_lyr:
+            wa_3km_fld_idx = self.wa3km_lyr.fields().lookupField('Water pts')
+            wa_5km_fld_idx = self.wa5km_lyr.fields().lookupField('Water pts')
+            wa_3km_att_map = {}
+            wa_5km_att_map = {}
+        for row in range(self.tbl.rowCount()):
+            new_wpt_data = []
+            item = self.tbl.item(row, 1)
+            if not item:
+                continue
+            item_data = item.data(Qt.DisplayRole)
+            pdk_item = self.tbl.item(row, 0)
+            if not pdk_item:
+                continue
+            pdk_id = int(pdk_item.data(Qt.DisplayRole).split('(')[1].split(')')[0])
+            wpt_info_split = item_data.split(';')# List like ['name1(3)', 'name2(5)', 'name(6)']
+            for wpt_info in wpt_info_split:
+                wpt_id = int(wpt_info.split('(')[1].split(')')[0])
+                wpt_ft = self.wp_lyr.getFeature(wpt_id)
+                wpt_name = wpt_ft[field_name]
+                new_wpt_data.append(f'{wpt_name}({wpt_id})')
+            new_data = '; '.join(new_wpt_data)
+            item.setData(Qt.DisplayRole, new_data)
+            if self.wa3km_lyr and self.wa5km_lyr:
+                for wa_3km_feat in [ft for ft in self.wa3km_lyr.getFeatures() if ft['Pdk_ID'] == pdk_id]:
+                    wa_3km_att_map[wa_3km_feat.id()] = {wa_3km_fld_idx: new_data}
+                for wa_5km_feat in [ft for ft in self.wa5km_lyr.getFeatures() if ft['Pdk_ID'] == pdk_id]:
+                    wa_5km_att_map[wa_5km_feat.id()] = {wa_5km_fld_idx: new_data}
+        if self.wa3km_lyr and self.wa5km_lyr:
+            self.wa3km_lyr.dataProvider().changeAttributeValues(wa_3km_att_map)
+            self.wa5km_lyr.dataProvider().changeAttributeValues(wa_5km_att_map)
+        self.tbl.resizeColumnToContents(1)
+    #***************************************************************************
             
     def manage_checkboxes(self):
         if self.file_widget.lineEdit().value() == '':
@@ -179,7 +247,6 @@ class CustomWateredAreasWidget(QWidget):
         self.reset_table()
                 
     def pdk_lyr_changed(self):
-#        print('paddock layer changed')
         self.pdk_lyr = self.pdk_layer_mlcb.currentLayer()
         self.set_canvas_layers()
         self.canvas.zoomToFullExtent()# Added here instead of zooming to full extent when clicking waterpoints
@@ -203,6 +270,11 @@ class CustomWateredAreasWidget(QWidget):
     
     def select_paddock(self):
         if self.pdk_layer_mlcb.currentLayer() == None or self.waterpoint_mlcb.currentLayer() == None:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle('Custom Watered Areas')
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.setText('No water point layer selected')
+            msg_box.exec()
             return
         if self.canvas.mapTool() == self.select_tool:
             self.select_tool.counter = 0
@@ -216,13 +288,15 @@ class CustomWateredAreasWidget(QWidget):
         for row in selected_rows:
             pdk_data = self.tbl.item(row, 0).data(Qt.DisplayRole)
             pdk = pdk_data.split('(')[0]
+            pdk_id = int(pdk_data.split('(')[1].split(')')[0])
+            print(pdk_id)
             if self.wa3km_lyr:
-                self.wa3km_lyr.dataProvider().deleteFeatures([ft.id() for ft in self.wa3km_lyr.getFeatures() if ft['Pdk_Name'] == pdk])
+                self.wa3km_lyr.dataProvider().deleteFeatures([ft.id() for ft in self.wa3km_lyr.getFeatures() if ft['Pdk_ID'] == pdk_id])
                 self.wa3km_lyr.updateExtents()
                 self.wa3km_lyr.triggerRepaint()
                 
             if self.wa5km_lyr:
-                self.wa5km_lyr.dataProvider().deleteFeatures([ft.id() for ft in self.wa5km_lyr.getFeatures() if ft['Pdk_Name'] == pdk])
+                self.wa5km_lyr.dataProvider().deleteFeatures([ft.id() for ft in self.wa5km_lyr.getFeatures() if ft['Pdk_ID'] == pdk_id])
                 self.wa5km_lyr.updateExtents()
                 self.wa5km_lyr.triggerRepaint()
             
@@ -267,6 +341,7 @@ class CustomWateredAreasWidget(QWidget):
         if not self.wa3km_lyr:
             self.wa3km_lyr = QgsVectorLayer(f'Polygon?crs={wa_crs.authid()}', '3km_WA', 'memory')
             self.wa3km_lyr.dataProvider().addAttributes([QgsField('Pdk_Name', QVariant.String),
+                                                        QgsField('Pdk_ID', QVariant.Int),
                                                         QgsField('Water pts', QVariant.String)])
             self.wa3km_lyr.updateFields()
             # Set 3km WA symbology
@@ -282,6 +357,7 @@ class CustomWateredAreasWidget(QWidget):
         if not self.wa5km_lyr:
             self.wa5km_lyr = QgsVectorLayer(f'Polygon?crs={wa_crs.authid()}', '5km_WA', 'memory')
             self.wa5km_lyr.dataProvider().addAttributes([QgsField('Pdk_Name', QVariant.String),
+                                                        QgsField('Pdk_ID', QVariant.Int),
                                                         QgsField('Water pts', QVariant.String)])
             self.wa5km_lyr.updateFields()
             # Set 5km WA symbology
@@ -300,12 +376,9 @@ class CustomWateredAreasWidget(QWidget):
             # Get data from first cell of each row
             pdk_info = self.tbl.item(row, 0).data(Qt.DisplayRole)
             pdk_name = pdk_info.split('(')[0]
-#            print(pdk_info)
             pdk_id = int(pdk_info.split('(')[1].split(')')[0])
-#            print(pdk_id)
             pdk_ft = self.pdk_lyr.getFeature(pdk_id)
             pdk_geom = self.transformed_geom(pdk_ft.geometry(), pdk_crs, wa_crs)
-#            print(pdk_geom)
             # get data from second cell of each row,
             wp_info = self.tbl.item(row, 1).data(Qt.DisplayRole)
             # extract ids as integers
@@ -314,7 +387,6 @@ class CustomWateredAreasWidget(QWidget):
             wp_fts = [self.wp_lyr.getFeature(id) for id in wp_ids]
             # get list of waterpoint geometries
             wp_geoms = [self.transformed_geom(ft.geometry(), wp_crs, wa_crs) for ft in wp_fts]
-#            print(wp_geoms)
             # collect
             all_wp_geom = QgsGeometry.collectGeometry(wp_geoms)
             # buffer 3km
@@ -330,7 +402,7 @@ class CustomWateredAreasWidget(QWidget):
             # 3km
             feat_3km = QgsFeature(self.wa3km_lyr.fields())
             feat_3km.setGeometry(pdk_3km_wa)
-            feat_3km.setAttributes([pdk_name, str(wp_info)])
+            feat_3km.setAttributes([pdk_name, pdk_id, str(wp_info)])
             # and add feature to watered area layer.
             self.wa3km_lyr.dataProvider().addFeatures([feat_3km])
             self.wa3km_lyr.updateExtents()
@@ -338,7 +410,7 @@ class CustomWateredAreasWidget(QWidget):
             # 5km
             feat_5km = QgsFeature(self.wa5km_lyr.fields())
             feat_5km.setGeometry(pdk_5km_wa)
-            feat_5km.setAttributes([pdk_name, str(wp_info)])
+            feat_5km.setAttributes([pdk_name, pdk_id, str(wp_info)])
             # and add feature to watered area layer.
             self.wa5km_lyr.dataProvider().addFeatures([feat_5km])
             self.wa5km_lyr.updateExtents()
@@ -368,6 +440,8 @@ class CustomWateredAreasWidget(QWidget):
     def export(self):
         if (not self.wa3km_lyr and not self.wa5km_lyr) or (self.wa3km_lyr.featureCount() == 0 and self.wa5km_lyr.featureCount() == 0):
             msg_box = QMessageBox(self)
+            msg_box.setWindowTitle('Custom Watered Areas')
+            msg_box.setIcon(QMessageBox.Warning)
             msg_box.setText('No watered areas to export!')
             msg_box.exec()
             return
@@ -476,7 +550,6 @@ class CustomWateredAreasWidget(QWidget):
         
         
     def closeEvent(self, e):
-#        print('Widget closed')
         if self.wa3km_lyr:
             self.wa3km_lyr = None
         if self.wa5km_lyr:
@@ -491,11 +564,15 @@ class CustomWateredAreasWidget(QWidget):
 class SelectTool(QgsMapTool):
     def __init__(self, canvas, pdk_layer, wp_layer, parent=None):
         self.canvas = canvas
+        self.project = QgsProject.instance()
         self.pdk_layer = pdk_layer
         self.wp_layer = wp_layer
         self.parent = parent
         QgsMapTool.__init__(self, self.canvas)
         self.counter = 0
+        
+        self.rubber_band = None
+        self.tl = None# Top Left corner of rectangle
     
     ########################################
     # Manipulate map tool cursor to assist with selecting paddocks and waterpoint
@@ -509,41 +586,68 @@ class SelectTool(QgsMapTool):
                 self.setCursor(QCursor(Qt.ArrowCursor))
         elif self.counter > 0:
             # Selecting water points
-            cursor_pos = self.toLayerCoordinates(self.wp_layer, e.mapPoint())
-            buffer = 100
-            if self.wp_layer.sourceCrs().isGeographic():
-                buffer = 0.001
-            if [ft for ft in self.wp_layer.getFeatures() if ft.geometry().buffer(buffer, 25).contains(cursor_pos)]:
-                self.setCursor(QCursor(Qt.CrossCursor))
+            if self.rubber_band:
+                # We are dragging a rectangle
+                br = self.toMapCoordinates(e.pos())
+                rect = QgsRectangle(self.tl, br)
+                self.rubber_band.setToGeometry(QgsGeometry().fromRect(rect))
             else:
-                self.setCursor(QCursor(Qt.ArrowCursor))
-    ########################################
-        
-    def canvasPressEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            self.counter+=1
-            if self.counter == 1:
-                # we are selecting a paddock
-                click_point = self.toLayerCoordinates(self.pdk_layer, e.mapPoint())
-                paddock_feat = [ft for ft in self.pdk_layer.getFeatures() if ft.geometry().contains(click_point)][0]
-                self.add_paddock_to_table(paddock_feat)
-            elif self.counter > 1:
-                # we are selecting waterpoints
-                click_point = self.toLayerCoordinates(self.wp_layer, e.mapPoint())
+                cursor_pos = self.toLayerCoordinates(self.wp_layer, e.mapPoint())
                 buffer = 100
                 if self.wp_layer.sourceCrs().isGeographic():
                     buffer = 0.001
-                waterpoint_feats = [ft for ft in self.wp_layer.getFeatures() if ft.geometry().buffer(buffer, 25).contains(click_point)]
-                if waterpoint_feats:
-                    waterpoint_feat = waterpoint_feats[0]
-                    self.add_waterpoints_to_table(waterpoint_feat)
+                if [ft for ft in self.wp_layer.getFeatures() if ft.geometry().buffer(buffer, 25).contains(cursor_pos)]:
+                    self.setCursor(QCursor(Qt.CrossCursor))
+                else:
+                    #self.setCursor(QCursor(Qt.ArrowCursor))
+                    self.setCursor(QgsApplication.getThemeCursor(QgsApplication.Cursor.Select))
+    ############################################################################
+        
+    def canvasPressEvent(self, e):
+        if not [ft for ft in self.pdk_layer.getFeatures() if ft.geometry().contains(self.toLayerCoordinates(self.pdk_layer, e.mapPoint()))]:
+            return
+        self.tl = self.toMapCoordinates(e.pos())
+        if e.button() == Qt.LeftButton:
+            modifiers = e.modifiers()
+            ###########SELECTING MULTIPLE WATER POINT BY DRAGGING RECTANGLE#####
+            if modifiers & Qt.ControlModifier:
+                self.rubber_band = QgsRubberBand(self.canvas, QgsWkbTypes.PolygonGeometry)
+                self.rubber_band.setStrokeColor(QColor(255, 0, 0, 150))
+                self.rubber_band.setWidth(1)
+            ##################SELECTING SINGLE WATER POINT######################
+            else:
+                self.counter+=1
+                if self.counter == 1:
+                    # we are selecting a paddock
+                    click_point = self.toLayerCoordinates(self.pdk_layer, e.mapPoint())
+                    paddock_feat = [ft for ft in self.pdk_layer.getFeatures() if ft.geometry().contains(click_point)][0]
+                    self.add_paddock_to_table(paddock_feat)
+                elif self.counter > 1:
+                    # we are selecting waterpoints
+                    click_point = self.toLayerCoordinates(self.wp_layer, e.mapPoint())
+                    buffer = 100
+                    if self.wp_layer.sourceCrs().isGeographic():
+                        buffer = 0.001
+                    waterpoint_feats = [ft for ft in self.wp_layer.getFeatures() if ft.geometry().buffer(buffer, 25).contains(click_point)]
+                    if waterpoint_feats:
+                        waterpoint_feat = waterpoint_feats[0]
+                        self.add_waterpoints_to_table(waterpoint_feat)
         elif e.button() == Qt.RightButton:
             self.canvas.unsetMapTool(self)
             self.deactivate()
                 
-        
+    def canvasReleaseEvent(self, e):
+        if self.rubber_band:
+            rb_geom = self.transformed_geom(self.rubber_band.asGeometry())
+            wp_feats = [ft for ft in self.wp_layer.getFeatures() if ft.geometry().intersects(rb_geom)]
+            for feat in wp_feats:
+                self.add_waterpoints_to_table(feat)
+            self.rubber_band.reset()
+            self.rubber_band = None
+            self.tl = None
+    
     def add_paddock_to_table(self, feat):
-        #TODO: Safeguard against key error (line 525) if self.parent.pdk_fld_cb.currentField() is None
+        #TODO: Safeguard against key error if self.parent.pdk_fld_cb.currentField() is None
         row_count = self.parent.tbl.rowCount()
         self.parent.tbl.setRowCount(row_count + 1)
         idx = row_count
@@ -552,7 +656,7 @@ class SelectTool(QgsMapTool):
         self.parent.tbl.resizeColumnsToContents()
         
     def add_waterpoints_to_table(self, feat):
-        #TODO: Safeguard against key error (line 535) if self.parent.wp_fld_cb.currentField() is None
+        #TODO: Safeguard against key error if self.parent.wp_fld_cb.currentField() is None
         row_count = self.parent.tbl.rowCount()
         row_idx = row_count-1
         item = self.parent.tbl.item(row_idx, 1)
@@ -569,4 +673,15 @@ class SelectTool(QgsMapTool):
 
     def deactivate(self):
         self.counter = 0
+        if self.rubber_band:
+            self.rubber_band.reset()
+            self.rubber_band = None
         self.deactivated.emit()
+        
+    def transformed_geom(self, g):
+        '''Convenience method to transform rectangle rubber band from
+        canvas CRS to waterpoint layer CRS to retrieve waterpoints'''
+        geom = QgsGeometry.fromWkt(g.asWkt())
+        xform = QgsCoordinateTransform(self.project.crs(), self.wp_layer.crs(), self.project)
+        geom.transform(xform)
+        return geom

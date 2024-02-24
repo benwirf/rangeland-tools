@@ -1,3 +1,5 @@
+from qgis.PyQt.QtGui import QIcon
+
 from qgis.core import (QgsProcessing,
                         QgsProcessingAlgorithm,
                         QgsProcessingMultiStepFeedback,
@@ -8,7 +10,9 @@ from qgis.core import (QgsProcessing,
                         QgsProcessingParameterFolderDestination,
                         QgsProcessingFeatureSourceDefinition,
                         QgsFeatureRequest)
+                        
 import processing
+
 import os
 
 
@@ -192,6 +196,9 @@ class ClipRastersByPastoralDistrict(QgsProcessingAlgorithm):
     def shortHelpString(self):
         return "Clips Growth Probability, Growth Percentile, TSDM & TSDM Percentile\
         rasters from AussieGRASS to pastoral districts for report maps."
+        
+    def icon(self):
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/clip_rasters_icon.png"))
 
     def group(self):
         return 'Feed Outlook'
