@@ -57,7 +57,7 @@ class TotalGrowthSummary(QgsProcessingAlgorithm):
         districts = self.parameterAsVectorLayer(parameters, self.DISTRICT_LAYER, context)
         destination_spreadsheet = parameters[self.OUTPUT_XLSX]
         ####################################################################
-        regions = {'Barkly': 'southern',
+        regions = {'Barkly': 'northern',# Changed from southern to northern March 2024
             'Darwin': 'northern',
             'Gulf': 'northern',
             'Katherine': 'northern',

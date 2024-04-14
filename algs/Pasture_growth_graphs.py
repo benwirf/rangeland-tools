@@ -169,7 +169,7 @@ class PastureGrowthGraphs(QgsProcessingAlgorithm):
         for fy_folder in fy_folders:
             fyear = fy_folder.split(' ')[0]
             dir_path = os.path.join(growth_folder_path, fy_folder)
-            file_count = [file for file in os.scandir(dir_path) if file.name.split('.')[-1] == 'img']
+            file_count = [file for file in os.scandir(dir_path) if file.name.split('.')[-1] == 'img' or file.name.split('.')[-1] == 'tiff']
             if len(file_count) == 1:
                 steps += len(file_count)# Just zonal stats will be run (1 alg)
             else:
@@ -185,7 +185,7 @@ class PastureGrowthGraphs(QgsProcessingAlgorithm):
             raw_inputs = []
             dir_path = os.path.join(growth_folder_path, fy_folder)
             for file in os.scandir(dir_path):
-                if file.name.split('.')[-1] == 'img':
+                if file.name.split('.')[-1] == 'img' or file.name.split('.')[-1] == 'tiff':
                     raster_path = os.path.join(dir_path, file.name)
                     raw_inputs.append(raster_path)
             # os.scandir() does not return files in directory order...
@@ -447,6 +447,8 @@ class CustomDistrictGraphWidget(QWidget):
         #self.populate_table()
         
     def lyr_changed(self, lyr):
+        if not lyr:
+            return
         self.name_fld_cb.setLayer(lyr)
         fld_names = [fld.name().upper() for fld in lyr.fields()]
         if 'NAME' in fld_names or 'DISTRICT' in fld_names:

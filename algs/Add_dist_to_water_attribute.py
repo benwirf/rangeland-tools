@@ -73,13 +73,12 @@ class AddDistanceToWaterAttribute(QgsProcessingAlgorithm):
             parentLayerParameterName=self.WATERPOINTS,
             type=QgsProcessingParameterField.String,
             optional=True))
-
+        
         self.addParameter(QgsProcessingParameterField(
             self.WP_NAME_FIELD,
             'Field to use for waterpoint name/ID',
-            parentLayerParameterName=self.WATERPOINTS,
-            type=QgsProcessingParameterField.String | QgsProcessingParameterField.Numeric))
-
+            parentLayerParameterName=self.WATERPOINTS))
+        
         self.addParameter(QgsProcessingParameterCrs(
             self.TARGET_CRS,
             'CRS to use for distance calculation (Projected)',
@@ -112,8 +111,8 @@ class AddDistanceToWaterAttribute(QgsProcessingAlgorithm):
         
         dest_crs = self.parameterAsCrs(parameters, self.TARGET_CRS, context)
         
-        output_fields = ([QgsField('Dist to nearest water m', len=8, prec=3),
-                        QgsField('Dist to nearest water km', len=8, prec=5),
+        output_fields = ([QgsField('Dist to nearest water m', QVariant.Double, len=8, prec=3),
+                        QgsField('Dist to nearest water km', QVariant.Double, len=8, prec=5),
                         QgsField('Water Type', QVariant.String),
                         QgsField('Water Name', QVariant.String)])
         

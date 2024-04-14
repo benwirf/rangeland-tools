@@ -84,10 +84,12 @@ class AddLayoutTable(QgsProcessingAlgorithm):
         input_layer = context.project().mapLayersByName(input_layer_name)
         if not input_layer:
             return (False, 'Missing parameter value for Input layer')
+        '''
         if input_layer[0].featureCount()>100:
             return(False, 'Input layer has more than 100 features; resulting\
                             table will be large! You may wish to dissolve\
                             input layer before proceeding.')
+        '''
         if (input_layer[0].geometryType() != 2) and (parameters[self.INPUT_PARAMETERS][5]):
             return (False, 'Area values can only be calculated for polygon layers')
         return (True, '')

@@ -11,7 +11,8 @@ from qgis.core import (QgsProject, QgsFieldProxyModel, QgsMapLayerProxyModel,
                         QgsVectorLayer, QgsField, QgsGeometry, QgsFeature,
                         QgsCoordinateTransform, QgsFeatureRequest, QgsProject,
                         QgsCoordinateReferenceSystem, QgsApplication,
-                        QgsRectangle, QgsCoordinateTransform, QgsWkbTypes)
+                        QgsRectangle, QgsCoordinateTransform, QgsWkbTypes,
+                        QgsRasterLayer)
                         
 from qgis.gui import (QgsMapLayerComboBox, QgsFieldComboBox, QgsMapCanvas,
                         QgsFileWidget, QgsMapToolPan, QgsMapTool,
@@ -30,6 +31,7 @@ class CustomWateredAreasWidget(QWidget):
         # define nullptr temporary layer variables to hold watered area features
         self.wa3km_lyr = None
         self.wa5km_lyr = None
+        self.basemap_lyr = QgsRasterLayer('crs=EPSG:3857&format&type=xyz&url=https://mt1.google.com/vt/lyrs%3Ds%26x%3D%7Bx%7D%26y%3D%7By%7D%26z%3D%7Bz%7D&zmax=19&zmin=0', '', 'wms')
         
         self.layout = QVBoxLayout(self)
         # Input layers widget
@@ -73,8 +75,17 @@ class CustomWateredAreasWidget(QWidget):
         self.canvas_tool_bar.addAction(self.action_pan)
         self.action_reset = QAction(QIcon(":images/themes/default/mActionZoomFullExtent.svg"), '', self.canvas_tool_bar)
         self.action_reset.setToolTip('Zoom To Full Extent')
-        self.action_reset.triggered.connect(lambda: self.canvas.zoomToFullExtent())
+        #self.action_reset.triggered.connect(lambda: self.canvas.zoomToFullExtent())
+        
         self.canvas_tool_bar.addAction(self.action_reset)
+        ###### 8-4-24
+        self.action_toggle_basemap = QAction(QIcon(":images/themes/default/propertyicons/map_tools.svg"), '', self.canvas_tool_bar)
+        self.action_toggle_basemap.setToolTip('Turn on/off basemap')
+        self.action_toggle_basemap.setCheckable(True)
+        self.action_toggle_basemap.setChecked(False)
+        #self.action_toggle_basemap.toggled.connect(self.set_canvas_layers)
+        self.canvas_tool_bar.addAction(self.action_toggle_basemap)
+        #####
         self.canvas_tool_bar.setOrientation(Qt.Vertical)
         self.canvas_widget_layout.addWidget(self.canvas)
         self.canvas_widget_layout.addWidget(self.canvas_tool_bar)
@@ -148,9 +159,11 @@ class CustomWateredAreasWidget(QWidget):
         
         self.canvas_layers = [self.wp_lyr, self.pdk_lyr]
         self.set_canvas_layers()
-        self.canvas.zoomToFullExtent()# Added here instead of zooming to full extent when clicking waterpoints
-        
+        #self.canvas.zoomToFullExtent()# Added here instead of zooming to full extent when clicking waterpoints
+        self.zoom_canvas()
+        self.action_reset.triggered.connect(self.zoom_canvas)
         self.reset_table()
+        self.action_toggle_basemap.toggled.connect(self.set_canvas_layers)# 8-4-24
         
         self.select_tool = SelectTool(self.canvas, self.pdk_lyr, self.wp_lyr, parent=self)
         self.select_tool_conn = self.select_tool.deactivated.connect(self.set_pan_tool)
@@ -238,7 +251,9 @@ class CustomWateredAreasWidget(QWidget):
     def wp_lyr_changed(self):
         self.wp_lyr = self.waterpoint_mlcb.currentLayer()
         self.set_canvas_layers()
-        self.canvas.zoomToFullExtent()# Added here instead of zooming to full extent when clicking waterpoints
+        #self.canvas.zoomToFullExtent()# Added here instead of zooming to full extent when clicking waterpoints
+        self.zoom_canvas()#8-4-24
+        
         self.wp_fld_cb.setLayer(self.wp_lyr)
         self.canvas.setMapTool(self.pan_tool)
         QObject.disconnect(self.select_tool_conn)
@@ -249,7 +264,9 @@ class CustomWateredAreasWidget(QWidget):
     def pdk_lyr_changed(self):
         self.pdk_lyr = self.pdk_layer_mlcb.currentLayer()
         self.set_canvas_layers()
-        self.canvas.zoomToFullExtent()# Added here instead of zooming to full extent when clicking waterpoints
+        #self.canvas.zoomToFullExtent()# Added here instead of zooming to full extent when clicking waterpoints
+        self.zoom_canvas()#8-4-24
+        
         self.pdk_fld_cb.setLayer(self.pdk_lyr)
         self.canvas.setMapTool(self.pan_tool)
         self.select_tool = SelectTool(self.canvas, self.pdk_lyr, self.wp_lyr, self)
@@ -260,13 +277,35 @@ class CustomWateredAreasWidget(QWidget):
         
     def set_canvas_layers(self):
 #        print('set_canvas_layers called')
-        self.canvas_layers = [self.wp_lyr, self.pdk_lyr]
+        if self.action_toggle_basemap.isChecked():
+            self.canvas_layers = [self.wp_lyr, self.pdk_lyr, self.basemap_lyr]
+        elif not self.action_toggle_basemap.isChecked():
+            self.canvas_layers = [self.wp_lyr, self.pdk_lyr]
+        #self.canvas_layers.insert(-1, self.basemap_lyr)
         if self.wa5km_lyr:
             self.canvas_layers.insert(1, self.wa5km_lyr)
         if self.wa3km_lyr:
             self.canvas_layers.insert(1, self.wa3km_lyr)
         self.canvas.setLayers(self.canvas_layers)
         # self.canvas.zoomToFullExtent()# Removed to avoid zooming to full extent when clicking waterpoints
+    
+    def zoom_canvas(self):
+        lyr_extents = []
+        if self.pdk_lyr:
+            lyr_extents.append((self.pdk_lyr.extent(), self.pdk_lyr.crs()))
+        if self.wp_lyr:
+            lyr_extents.append((self.wp_lyr.extent(), self.wp_lyr.crs()))
+        if len(lyr_extents) == 2:
+            #[QgsGeometry.fromRect(r) for r in lyr_extents]
+            pdk_ext_geom = self.transformed_geom(QgsGeometry.fromRect(lyr_extents[0][0]), lyr_extents[0][1], self.canvas.mapSettings().destinationCrs())
+            wp_ext_geom = self.transformed_geom(QgsGeometry.fromRect(lyr_extents[1][0]), lyr_extents[1][1], self.canvas.mapSettings().destinationCrs())
+            combined_geom = QgsGeometry.collectGeometry([pdk_ext_geom, wp_ext_geom])
+            rect = combined_geom.boundingBox()
+        elif len(lyr_extents) == 1:
+            ext_geom = self.transformed_geom(QgsGeometry.fromRect(lyr_extents[0][0]), lyr_extents[0][1], self.canvas.mapSettings().destinationCrs())
+            rect = ext_geom.boundingBox()
+        self.canvas.zoomToFeatureExtent(rect)
+        
     
     def select_paddock(self):
         if self.pdk_layer_mlcb.currentLayer() == None or self.waterpoint_mlcb.currentLayer() == None:
@@ -604,8 +643,14 @@ class SelectTool(QgsMapTool):
     ############################################################################
         
     def canvasPressEvent(self, e):
-        if not [ft for ft in self.pdk_layer.getFeatures() if ft.geometry().contains(self.toLayerCoordinates(self.pdk_layer, e.mapPoint()))]:
-            return
+        #Edit April 2024
+        if self.counter == 0:
+            # we are selecting a paddock so we make sure user clicked inside a paddock feature
+            if not [ft for ft in self.pdk_layer.getFeatures() if ft.geometry().contains(self.toLayerCoordinates(self.pdk_layer, e.mapPoint()))]:
+                msg_box = QMessageBox()
+                msg_box.setText('Please click inside a paddock feature')
+                msg_box.exec()
+                return
         self.tl = self.toMapCoordinates(e.pos())
         if e.button() == Qt.LeftButton:
             modifiers = e.modifiers()

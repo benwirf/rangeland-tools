@@ -198,7 +198,7 @@ class ClipRastersByPastoralDistrict(QgsProcessingAlgorithm):
         rasters from AussieGRASS to pastoral districts for report maps."
         
     def icon(self):
-        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/clip_rasters_icon.png"))
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/clip_rasters_icon.PNG"))
 
     def group(self):
         return 'Feed Outlook'
