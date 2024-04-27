@@ -34,7 +34,8 @@ from qgis.core import (NULL,
                         QgsCoordinateTransform,
                         QgsCoordinateReferenceSystem,
                         QgsDistanceArea,
-                        QgsUnitTypes)
+                        QgsUnitTypes,
+                        QgsWkbTypes)
 
 from pathlib import Path
 
@@ -325,6 +326,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
             for ft in lltpd_temp_result.getFeatures():
                 if ft.geometry().intersects(all_pdks_projected):
                     prop_ix = ft.geometry().intersection(all_pdks_projected)
+                    ###########################################################CONVERT GEOMETRY COLLECTION*********************
+                    prop_ix.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                     prop_lt_feat = QgsFeature(property_land_types_temp.fields())
                     prop_lt_feat.setGeometry(prop_ix)
 #                    prop_atts = ft.attributes()
@@ -376,6 +379,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
             for lt_ft in lltpd_temp_result.getFeatures():
                 if lt_ft.geometry().intersects(pdk_geom):
                     pdk_ix = lt_ft.geometry().intersection(pdk_geom)
+                    ###########################################################CONVERT GEOMETRY COLLECTION
+                    pdk_ix.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                     pdk_lt_feat = QgsFeature(paddock_land_types_temp.fields())
                     pdk_lt_feat.setGeometry(pdk_ix)
                     pdk_lt_atts = ['Un-named paddock' if pdk_ft[paddock_name_field] == NULL else pdk_ft[paddock_name_field]]#*************
@@ -454,6 +459,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                             #feedback.pushDebugInfo('Intersection found')
                             #*
                             pdk_3km_wa_ix = lt_ft.geometry().intersection(pdk_3km_wa_geom)
+                            ###########################################################CONVERT GEOMETRY COLLECTION
+                            pdk_3km_wa_ix.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                             pdk_3km_wa_lt_feat = QgsFeature(pdk_3k_wa_land_types_temp.fields())
                             pdk_3km_wa_lt_feat.setGeometry(pdk_3km_wa_ix)
                             pdk_3km_wa_lt_atts = ['Un-named paddock' if pdk_ft[paddock_name_field] == NULL else pdk_ft[paddock_name_field]]
@@ -505,6 +512,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                     for lt_ft in lltpd_temp_result.getFeatures():
                         if lt_ft.geometry().intersects(property_3km_watered_area_geom):
                             prop_3k_wa_land_types_ix = lt_ft.geometry().intersection(property_3km_watered_area_geom)
+                            ###########################################################CONVERT GEOMETRY COLLECTION
+                            pdk_3km_wa_land_types_ix.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                             prop_3k_wa_lt_feat = QgsFeature(prop_3k_wa_land_types_temp.fields())
                             prop_3k_wa_lt_feat.setGeometry(prop_3k_wa_land_types_ix)
                             #***********!!!!!!!!!!!!!!!!!!
@@ -571,6 +580,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                             #feedback.pushDebugInfo('Heyyy, intersection found')
                             #*
                             pdk_5km_wa_ix = lt_ft.geometry().intersection(pdk_5km_wa_geom)
+                            ###########################################################CONVERT GEOMETRY COLLECTION
+                            pdk_5km_wa_ix.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                             pdk_5km_wa_lt_feat = QgsFeature(pdk_5k_wa_land_types_temp.fields())
                             pdk_5km_wa_lt_feat.setGeometry(pdk_5km_wa_ix)
                             pdk_5km_wa_lt_atts = ['Un-named paddock' if pdk_ft[paddock_name_field] == NULL else pdk_ft[paddock_name_field]]
@@ -622,6 +633,8 @@ class ExtractLandTypes(QgsProcessingAlgorithm):
                     for lt_ft in lltpd_temp_result.getFeatures():
                         if lt_ft.geometry().intersects(property_5km_watered_area_geom):
                             prop_5k_wa_land_types_ix = lt_ft.geometry().intersection(property_5km_watered_area_geom)
+                            ###########################################################CONVERT GEOMETRY COLLECTION
+                            pdk_5km_wa_land_types_ix.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                             prop_5k_wa_lt_feat = QgsFeature(prop_5k_wa_land_types_temp.fields())
                             prop_5k_wa_lt_feat.setGeometry(prop_5k_wa_land_types_ix)
                             prop_5k_wa_atts = [lt_ft[unit_fields[0]]]

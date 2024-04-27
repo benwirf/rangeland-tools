@@ -227,9 +227,13 @@ class CarryingCapacitySummary(QgsProcessingAlgorithm):
                 buffers_3km = [ft.geometry().buffer(3000, 25) for ft in pdk_wpts]
                 dissolved_3km_buffers = QgsGeometry.unaryUnion(buffers_3km)
                 pdk_3km_wa = dissolved_3km_buffers.intersection(pdk_geom)
+                ###########################################################CONVERT GEOMETRY COLLECTION*********************
+                pdk_3km_wa.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                 buffers_5km = [ft.geometry().buffer(5000, 25) for ft in pdk_wpts]
                 dissolved_5km_buffers = QgsGeometry.unaryUnion(buffers_5km)
                 pdk_5km_wa = dissolved_5km_buffers.intersection(pdk_geom)
+                ###########################################################CONVERT GEOMETRY COLLECTION*********************
+                pdk_5km_wa.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
             
             pdk_lt_candidates = land_types_index.intersects(pdk_geom.boundingBox())
             
@@ -246,11 +250,17 @@ class CarryingCapacitySummary(QgsProcessingAlgorithm):
                 land_type_atts = [land_type_features[0][fld_name] for fld_name in lt_fields]
 
                 lt_in_pdk = QgsGeometry.collectGeometry([ft.geometry().makeValid().intersection(pdk_geom) for ft in land_type_features])
+                ###########################################################CONVERT GEOMETRY COLLECTION*********************
+                lt_in_pdk.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                 PDK_LT_AREA = lt_in_pdk.area()
                 ############################################################
                 pdk_3km_wa_lt = QgsGeometry.collectGeometry([ft.geometry().makeValid().intersection(pdk_3km_wa) for ft in land_type_features])
+                ###########################################################CONVERT GEOMETRY COLLECTION*********************
+                pdk_3km_wa_lt.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                 PDK_3KM_WA_LT_AREA = pdk_3km_wa_lt.area()
                 pdk_5km_wa_lt = QgsGeometry.collectGeometry([ft.geometry().makeValid().intersection(pdk_5km_wa) for ft in land_type_features])
+                ###########################################################CONVERT GEOMETRY COLLECTION*********************
+                pdk_5km_wa_lt.convertGeometryCollectionToSubclass(QgsWkbTypes.PolygonGeometry)
                 PDK_5KM_WA_LT_AREA = pdk_5km_wa_lt.area()
                 ############################################################
                 # We use 50% of the area between 3 and 5km from water so...
