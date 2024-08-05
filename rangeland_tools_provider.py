@@ -58,6 +58,9 @@ from Daily_movement_stats import DailyMovementStats
 from Daily_movement_summary import DailyMovementSummary
 from Add_dist_to_water_attribute import AddDistanceToWaterAttribute
 from Add_land_type_attribute import AddLandTypeAttribute
+from Time_per_dtw_bands import TimePerWateredBand
+from DTW_stats import DistanceToWaterStats
+from Filter_by_datetime import FilterByDateTime
 
 iconPath = os.path.dirname(__file__)
 
@@ -106,7 +109,10 @@ class RangelandToolsProvider(QgsProcessingProvider):
                         DailyMovementStats(),
                         DailyMovementSummary(),
                         AddDistanceToWaterAttribute(),
-                        AddLandTypeAttribute()]
+                        AddLandTypeAttribute(),
+                        TimePerWateredBand(),
+                        DistanceToWaterStats(),
+                        FilterByDateTime()]
 
         for alg in self.alglist:
             self.addAlgorithm(alg)

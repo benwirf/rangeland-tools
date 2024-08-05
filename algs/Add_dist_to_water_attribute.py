@@ -7,7 +7,7 @@ from qgis.core import (QgsField, QgsFeature, QgsFeatureSink, QgsFeatureRequest,
                         QgsProcessingParameterFeatureSink, QgsGeometry,
                         QgsProcessingParameterCrs, QgsCoordinateTransform,
                         QgsSpatialIndex)
-
+import processing
                        
 class AddDistanceToWaterAttribute(QgsProcessingAlgorithm):
     INPUT = 'INPUT'
@@ -132,10 +132,19 @@ class AddDistanceToWaterAttribute(QgsProcessingAlgorithm):
         #############################################################
         if wpt_lyr.sourceCrs() != dest_crs:
             wpt_vlayer = wpt_lyr.materialize(QgsFeatureRequest().setDestinationCrs(dest_crs, context.transformContext()))
-            wpt_sp_idx = QgsSpatialIndex(wpt_vlayer)
         else:
             wpt_vlayer = wpt_lyr.materialize(QgsFeatureRequest())
-            wpt_sp_idx = QgsSpatialIndex(wpt_lyr)
+                        
+        fix_geom_params = {'INPUT': wpt_vlayer,
+                            'METHOD':1,
+                            'OUTPUT':'TEMPORARY_OUTPUT'}
+        wpt_vlayer_fixed_id = processing.run("native:fixgeometries",
+                                            fix_geom_params,
+                                            is_child_algorithm=True,
+                                            feedback=feedback,
+                                            context=context)['OUTPUT']
+        wpt_vlayer_fixed = context.getMapLayer(wpt_vlayer_fixed_id)
+        wpt_sp_idx = QgsSpatialIndex(wpt_vlayer_fixed)
         
         output_feats = []
         feature_count = source.featureCount()
@@ -150,7 +159,10 @@ class AddDistanceToWaterAttribute(QgsProcessingAlgorithm):
                 geom = self.transformed_geom(ft.geometry(), src_crs, dest_crs, context.project())
             else:
                 geom = ft.geometry()
-            pnt = geom.asMultiPoint()[0]
+            try:
+                pnt = geom.asMultiPoint()[0]
+            except TypeError:
+                pnt = geom.asPoint()
             nwp_id = wpt_sp_idx.nearestNeighbor(pnt)[0]
             nwp_ft = wpt_vlayer.getFeature(nwp_id)
             atts = [ft[fld_name] for fld_name in source_fields]
@@ -161,9 +173,16 @@ class AddDistanceToWaterAttribute(QgsProcessingAlgorithm):
             dist_to_nearest_water_km = dist_to_nearest_water/1000
             atts.append(round(dist_to_nearest_water_km, 5))
             if wpt_type_fld is not None:
-                nearest_wp_type = nwp_ft[wpt_type_fld]
+                #feedback.pushInfo(repr(nwp_ft))
+                try:
+                    nearest_wp_type = nwp_ft[wpt_type_fld]
+                except KeyError:
+                    nearest_wp_type = 'Not Found'
                 atts.append(str(nearest_wp_type))
-            nearest_wp_name = nwp_ft[wpt_name_fld]
+            try:
+                nearest_wp_name = nwp_ft[wpt_name_fld]
+            except KeyError:
+                nearest_wp_name = 'Not Found'
             atts.append(str(nearest_wp_name))
             feat = QgsFeature(sink_fields)
             feat.setGeometry(ft.geometry())

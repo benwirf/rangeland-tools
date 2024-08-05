@@ -3,7 +3,7 @@ from qgis.PyQt.QtCore import (Qt, QObject, QVariant)
 from qgis.PyQt.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLabel,
                                 QHBoxLayout, QToolBar, QTableWidget,
                                 QCheckBox, QPushButton, QMessageBox,
-                                QTableWidgetItem, QAction)
+                                QTableWidgetItem, QAction, QSpinBox)
 
 from qgis.PyQt.QtGui import (QIcon, QCursor, QColor)
 
@@ -12,7 +12,9 @@ from qgis.core import (QgsProject, QgsFieldProxyModel, QgsMapLayerProxyModel,
                         QgsCoordinateTransform, QgsFeatureRequest, QgsProject,
                         QgsCoordinateReferenceSystem, QgsApplication,
                         QgsRectangle, QgsCoordinateTransform, QgsWkbTypes,
-                        QgsRasterLayer)
+                        QgsRasterLayer, QgsStyle, QgsSymbol, QgsProperty,
+                        QgsSymbolLayer, QgsRendererCategory,
+                        QgsCategorizedSymbolRenderer, QgsFields, NULL)
                         
 from qgis.gui import (QgsMapLayerComboBox, QgsFieldComboBox, QgsMapCanvas,
                         QgsFileWidget, QgsMapToolPan, QgsMapTool,
@@ -111,14 +113,33 @@ class CustomWateredAreasWidget(QWidget):
         ###Checkbox widget
         self.checkbox_widget = QWidget(self)
         self.checkbox_layout = QHBoxLayout(self.checkbox_widget)
+        ###JULY-2024
+        self.watered_bands_checkbox = QCheckBox('Create watered bands?', self.checkbox_widget)
+        self.watered_bands_spinbox_lbl = QLabel('Band width (meters)', self.checkbox_widget)
+        self.watered_bands_spinbox = QSpinBox(self.checkbox_widget)
+        self.watered_bands_spinbox.setMaximum(10000)
+        self.watered_bands_spinbox.setMinimum(10)
+        self.watered_bands_spinbox.setValue(500)
+        self.watered_bands_spinbox.setSingleStep(50)
+        self.watered_bands_spinbox_lbl.setEnabled(False)
+        self.watered_bands_spinbox.setEnabled(False)
+        self.watered_bands_checkbox.stateChanged.connect(self.manage_spinbox)
+        ###JULY-2024
         self.report_checkbox = QCheckBox('Create report spreadsheet?', self.checkbox_widget)
         self.report_checkbox.setEnabled(False)
         self.checkbox_conn = self.report_checkbox.stateChanged.connect(self.manage_checkboxes)
         self.load_checkbox = QCheckBox('Load outputs?', self.checkbox_widget)
         self.load_checkbox.setCheckState(Qt.Checked)
         self.load_checkbox.setEnabled(False)
+        self.checkbox_layout.addStretch()
+        self.checkbox_layout.addWidget(self.watered_bands_checkbox)
+        self.checkbox_layout.addWidget(self.watered_bands_spinbox_lbl)
+        self.checkbox_layout.addWidget(self.watered_bands_spinbox)
+        self.checkbox_layout.addStretch()
         self.checkbox_layout.addWidget(self.report_checkbox)
+        self.checkbox_layout.addStretch()
         self.checkbox_layout.addWidget(self.load_checkbox)
+        self.checkbox_layout.addStretch()
                 
         self.file_widget = QgsFileWidget(self)
         self.file_widget.lineEdit().setPlaceholderText('Temporary Folder')
@@ -167,6 +188,8 @@ class CustomWateredAreasWidget(QWidget):
         
         self.select_tool = SelectTool(self.canvas, self.pdk_lyr, self.wp_lyr, parent=self)
         self.select_tool_conn = self.select_tool.deactivated.connect(self.set_pan_tool)
+        
+        self.set_pan_tool()
     
     #***************************************************************************25-01-2024
     def paddock_name_field_changed(self, field_name):
@@ -231,7 +254,10 @@ class CustomWateredAreasWidget(QWidget):
             self.wa5km_lyr.dataProvider().changeAttributeValues(wa_5km_att_map)
         self.tbl.resizeColumnToContents(1)
     #***************************************************************************
-            
+    def manage_spinbox(self, is_checked):
+        self.watered_bands_spinbox.setEnabled(is_checked)
+        self.watered_bands_spinbox_lbl.setEnabled(is_checked)
+        
     def manage_checkboxes(self):
         if self.file_widget.lineEdit().value() == '':
             if self.report_checkbox.checkState() == Qt.Checked:
@@ -328,7 +354,7 @@ class CustomWateredAreasWidget(QWidget):
             pdk_data = self.tbl.item(row, 0).data(Qt.DisplayRole)
             pdk = pdk_data.split('(')[0]
             pdk_id = int(pdk_data.split('(')[1].split(')')[0])
-            print(pdk_id)
+            #print(pdk_id)
             if self.wa3km_lyr:
                 self.wa3km_lyr.dataProvider().deleteFeatures([ft.id() for ft in self.wa3km_lyr.getFeatures() if ft['Pdk_ID'] == pdk_id])
                 self.wa3km_lyr.updateExtents()
@@ -381,7 +407,7 @@ class CustomWateredAreasWidget(QWidget):
             self.wa3km_lyr = QgsVectorLayer(f'Polygon?crs={wa_crs.authid()}', '3km_WA', 'memory')
             self.wa3km_lyr.dataProvider().addAttributes([QgsField('Pdk_Name', QVariant.String),
                                                         QgsField('Pdk_ID', QVariant.Int),
-                                                        QgsField('Water pts', QVariant.String)])
+                                                        QgsField('Water_pts', QVariant.String)])
             self.wa3km_lyr.updateFields()
             # Set 3km WA symbology
             r = self.wa3km_lyr.renderer().clone()
@@ -397,7 +423,7 @@ class CustomWateredAreasWidget(QWidget):
             self.wa5km_lyr = QgsVectorLayer(f'Polygon?crs={wa_crs.authid()}', '5km_WA', 'memory')
             self.wa5km_lyr.dataProvider().addAttributes([QgsField('Pdk_Name', QVariant.String),
                                                         QgsField('Pdk_ID', QVariant.Int),
-                                                        QgsField('Water pts', QVariant.String)])
+                                                        QgsField('Water_pts', QVariant.String)])
             self.wa5km_lyr.updateFields()
             # Set 5km WA symbology
             r = self.wa5km_lyr.renderer().clone()
@@ -512,12 +538,21 @@ class CustomWateredAreasWidget(QWidget):
                 # Create report spreadsheet option is not available
                 wa_3km_output.setRenderer(self.wa3km_lyr.renderer().clone())
                 wa_5km_output.setRenderer(self.wa5km_lyr.renderer().clone())
-                QgsProject.instance().addMapLayers([wa_3km_output, wa_5km_output])
+                #####################DTW LAYER######################
+                if self.watered_bands_checkbox.isChecked():
+                    dtw_lyr = self.create_dtw_bands()
+                    dtw_renderer = self.dtw_bands_renderer(dtw_lyr)
+                    #print(dtw_renderer)
+                    dtw_lyr.setRenderer(dtw_renderer)
+                    QgsProject.instance().addMapLayers([wa_3km_output, wa_5km_output, dtw_lyr])
+                ###################################################
+                else:
+                    QgsProject.instance().addMapLayers([wa_3km_output, wa_5km_output])
                 
             elif self.file_widget.lineEdit().value():
                 # We are working with file outputs
                 layers_to_load = {}
-                output_paths = []
+                #output_paths = []
                 output_dir = self.file_widget.filePath()
                 if not os.path.exists(output_dir):
                     msg_box = QMessageBox(self)
@@ -532,20 +567,31 @@ class CustomWateredAreasWidget(QWidget):
                     
                 wa_3km_output_path = os.path.join(output_dir, '3km_WA.gpkg')
                 wa_5km_output_path = os.path.join(output_dir, '5km_WA.gpkg')
+                if self.watered_bands_checkbox.isChecked():
+                    dtw_output = self.create_dtw_bands()
+                    dtw_bands_output_path = os.path.join(output_dir, 'DTW_Bands.gpkg')
+                    output_layers = [wa_3km_output, wa_5km_output, dtw_output]
+                    output_paths = [wa_3km_output_path, wa_5km_output_path, dtw_bands_output_path]
+                    lyr_names = ['3km_WA', '5km_WA', 'dtw_bands']
+                else:
+                    output_layers = [wa_3km_output, wa_5km_output]
+                    output_paths = [wa_3km_output_path, wa_5km_output_path]
+                    lyr_names = ['3km_WA', '5km_WA']
                 
-                for i, path in enumerate([wa_3km_output_path, wa_5km_output_path]):
-                    output_paths.append(path)
-                    save_params = {'INPUT': [wa_3km_output, wa_5km_output][i],
+                for i, path in enumerate(output_paths):
+                    #output_paths.append(path)
+                    save_params = {'INPUT': output_layers[i],
                                     'OUTPUT':path}
                     processing.run('native:savefeatures', save_params)
                     if self.load_checkbox.checkState() == Qt.Checked:
-                        layers_to_load[path]=['3km_WA', '5km_WA'][i]# Path will be source uri for creating a QgsVectorLayer, i will be TOC position
-                    
-                
+                        # path will be source uri for creating a QgsVectorLayer, lyr_names[i] is layer name
+                        # these parameters are passed to the load_output_layer() method
+                        layers_to_load[path] = lyr_names[i]
+                            
                 if self.report_checkbox.checkState() == Qt.Checked:
                     report_spreadsheet_path = os.path.join(output_dir, 'Watered_areas.xlsx')
                     output_paths.append(report_spreadsheet_path)
-                    save_2_xlsx_params = {'LAYERS': [wa_3km_output, wa_5km_output],
+                    save_2_xlsx_params = {'LAYERS': output_layers,
                                         'USE_ALIAS':False,
                                         'FORMATTED_VALUES':False,
                                         'OUTPUT':report_spreadsheet_path,
@@ -571,7 +617,117 @@ class CustomWateredAreasWidget(QWidget):
                         if os.path.exists(fpath):
                             self.load_output_layer(fpath, lname)
                 
-    
+####################################DTW_BANDS##################################
+    def create_dtw_bands(self):
+        band_width = self.watered_bands_spinbox.value()
+        dtw_band_lyr = QgsVectorLayer(f'Polygon?crs={self.wa3km_lyr.crs().authid()}', 'DTW_Bands', 'memory')
+        dtw_band_flds = QgsFields()
+        flds_to_add = [QgsField('Pdk Name', QVariant.String),
+                        QgsField('PdkArea Ha', QVariant.Double, len=10, prec=2),
+                        QgsField('DTW Band', QVariant.String),
+                        QgsField('Outer dist', QVariant.Int),
+                        QgsField('Area Ha', QVariant.Double, len=10, prec=2),
+                        QgsField('Percent', QVariant.Double, len=10, prec=7),
+                        QgsField('Max DTW', QVariant.Int)]
+        for fld in flds_to_add:
+            dtw_band_flds.append(fld)
+        dtw_band_lyr.dataProvider().addAttributes(dtw_band_flds)
+        dtw_band_lyr.updateFields()
+        
+        pdk_max_dtws = {}
+
+        unnamed_pdk_count = 0
+        
+        feats = []
+        
+        for ft in self.wa3km_lyr.getFeatures():
+            pdk_id = ft['Pdk_ID']
+            pdk_name = ft['Pdk_Name']
+            if pdk_name == NULL or pdk_name == '':
+                pdk_name = f'Unnamed Paddock {unnamed_pdk_count+1}'
+                unnamed_pdk_count+=1
+            pdk = self.pdk_lyr.getFeature(pdk_id)
+            pdk_area = round(pdk.geometry().area()/10000, 2)# Hectares
+            wpt_ids = self.parse_waterpoints(ft['Water_pts'])
+            waterpoint_geoms = [wp.geometry() for wp in self.wp_lyr.getFeatures(wpt_ids)]
+#----------------------------
+            if waterpoint_geoms:
+                buffer_distance = band_width
+                band_count = 0
+                band_intersects = True
+                # dissolved buffer of all paddock waterpoints
+                # this will be the first 'band' (just a buffer around waterpoint)
+                first_buffer = QgsGeometry.unaryUnion([geom.buffer(buffer_distance, 25) for geom in waterpoint_geoms])
+                # print(f'Band count: {band_count}')
+                if band_count == 0:
+                    if first_buffer.intersects(pdk.geometry()):
+                        clipped_to_pdk = first_buffer.intersection(pdk.geometry())
+                        area_ha = round(clipped_to_pdk.area()/10000, 2)
+                        pcnt = round((clipped_to_pdk.area()/pdk.geometry().area())*100, 7)
+                        feat = QgsFeature(dtw_band_flds)
+                        feat.setGeometry(clipped_to_pdk)
+                        feat.setAttributes([pdk_name, pdk_area, f'0-{buffer_distance}m', buffer_distance, area_ha, pcnt])
+                        feats.append(feat)
+                    buffer_distance+=band_width
+                    band_count+=1
+                # these will be 'band buffers' composed of difference between current & previous buffer
+                # break the loop if the last buffer does not intersect the paddock
+                while band_intersects and band_count < 500:
+                    # print(f'Band count: {band_count}')
+                    outer_ring = QgsGeometry.unaryUnion([geom.buffer(buffer_distance, 25) for geom in waterpoint_geoms])
+                    inner_ring = QgsGeometry.unaryUnion([geom.buffer(buffer_distance-band_width, 25) for geom in waterpoint_geoms])
+                    dtw_band = outer_ring.difference(inner_ring)
+                    if dtw_band.intersects(pdk.geometry()):
+                        clipped_to_pdk = dtw_band.intersection(pdk.geometry())
+                        area_ha = round(clipped_to_pdk.area()/10000, 2)
+                        pcnt = round((clipped_to_pdk.area()/pdk.geometry().area())*100, 7)
+                        feat = QgsFeature(dtw_band_flds)
+                        feat.setGeometry(clipped_to_pdk)
+                        feat.setAttributes([pdk_name,
+                                            pdk_area,
+                                            f'{buffer_distance-band_width}-{buffer_distance}m',
+                                            buffer_distance,
+                                            area_ha,
+                                            pcnt])
+                        feats.append(feat)
+                        buffer_distance+=band_width
+                        band_count+=1
+                    else:
+                        band_intersects = False
+                pdk_max_dist_to_water = band_count*band_width
+                pdk_max_dtws[pdk_name] = pdk_max_dist_to_water
+        
+        for ft in feats:
+            max_dtw = pdk_max_dtws[ft['Pdk Name']]
+            atts = ft.attributes()
+            atts.append(max_dtw)
+            ft.setAttributes(atts)
+            success = dtw_band_lyr.dataProvider().addFeature(ft)
+            
+        dtw_band_lyr.updateExtents()
+        return dtw_band_lyr
+
+    def dtw_bands_renderer(self, layer):
+        default_style = QgsStyle.defaultStyle()
+        color_ramp = default_style.colorRamp('Spectral') #Spectral color ramp
+        color_ramp.invert()
+        field_index = layer.fields().lookupField('Outer dist')
+        unique_values = sorted(list(layer.uniqueValues(field_index)))
+        categories = []
+        for value in unique_values:
+            symbol = QgsSymbol.defaultSymbol(layer.geometryType())
+            sym_lyr = symbol.symbolLayer(0).clone()
+            prop = QgsProperty()
+            prop.setExpressionString("darker(@symbol_color, 150)")
+            sym_lyr.setDataDefinedProperty(QgsSymbolLayer.PropertyStrokeColor, prop)
+            symbol.changeSymbolLayer(0, sym_lyr)
+            category = QgsRendererCategory(value, symbol, str(value))
+            categories.append(category)
+        renderer = QgsCategorizedSymbolRenderer('Outer dist', categories)
+        renderer.updateColorRamp(color_ramp)
+        return renderer
+####################################END_DTW_BANDS##################################
+
     def load_output_layer(self, lyr_path, lyr_name):# From layers to load dict
         v_layer = QgsVectorLayer(lyr_path, lyr_name, 'ogr')
         if not v_layer.isValid():
@@ -584,10 +740,12 @@ class CustomWateredAreasWidget(QWidget):
             v_layer.setRenderer(self.wa3km_lyr.renderer().clone())
         elif '5km' in lyr_name:
             v_layer.setRenderer(self.wa5km_lyr.renderer().clone())
+        else:
+            renderer = self.dtw_bands_renderer(v_layer)
+            v_layer.setRenderer(renderer)
         QgsProject.instance().addMapLayer(v_layer, False)
         QgsProject.instance().layerTreeRoot().insertLayer(0, v_layer)
-        
-        
+                
     def closeEvent(self, e):
         if self.wa3km_lyr:
             self.wa3km_lyr = None

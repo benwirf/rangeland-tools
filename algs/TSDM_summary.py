@@ -1,12 +1,16 @@
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
+from qgis.PyQt.QtWidgets import (QWidget, QTableWidget, QTableWidgetItem,
+                                QComboBox, QLabel, QVBoxLayout)
 from qgis.PyQt.QtGui import QIcon
 from qgis.core import (QgsVectorLayer, QgsField, QgsFeature,
                         QgsProcessing, QgsProcessingAlgorithm,
                         QgsProcessingParameterRasterLayer,
                         QgsProcessingParameterVectorLayer,
+                        QgsProcessingParameterMatrix,
                         QgsProcessingParameterFileDestination,
                         QgsProcessingMultiStepFeedback)
 
+from processing.gui.wrappers import WidgetWrapper
 from osgeo import gdalnumeric
 import processing
 import os
@@ -16,7 +20,7 @@ class TSDMSummary(QgsProcessingAlgorithm):
     TSDM = 'TSDM'
     TSDM_PCNT = 'TSDM_PCNT'
     DISTRICTS = 'DISTRICTS'
-    
+    CUSTOM_PARAMS = 'CUSTOM_PARAMS'
     XL_SUMMARY = 'XL_SUMMARY'
  
     def __init__(self):
@@ -40,7 +44,9 @@ class TSDMSummary(QgsProcessingAlgorithm):
     def shortHelpString(self):
         return "Creates an Excel Workbook containing 2 sheets with counts and percentages of pixels\
         for each pastoral district. One with low, low-moderate, moderate and high classes for TSDM,\
-        and one with below average, average and above average for TSDM percentile."
+        and one with below average, average and above average for TSDM percentile.\
+        Notes: TSDM raster has valid pixel values above 0; Water is -2.\
+        TSDM percentile raster has valid values 0-100; Water is 254; Firescars are 253."
  
     def helpUrl(self):
         return "https://qgis.org"
@@ -54,6 +60,10 @@ class TSDMSummary(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterRasterLayer(self.TSDM_PCNT, 'AussieGRASS TSDM Percentile raster'))
         self.addParameter(QgsProcessingParameterVectorLayer(self.DISTRICTS, 'Pastoral Districts layer', [QgsProcessing.TypeVectorPolygon]))
             
+        custom_params = QgsProcessingParameterMatrix(self.CUSTOM_PARAMS, '')
+        custom_params.setMetadata({'widget_wrapper': {'class': CustomParametersWidgetWrapper}})
+        self.addParameter(custom_params)
+        
         self.addParameter(QgsProcessingParameterFileDestination(self.XL_SUMMARY, 'TSDM summary spreadsheet', 'Microsoft Excel (*.xlsx);;Open Document Spreadsheet (*.ods)'))
  
     def processAlgorithm(self, parameters, context, model_feedback):
@@ -67,18 +77,18 @@ class TSDMSummary(QgsProcessingAlgorithm):
         dest_spreadsheet = parameters[self.XL_SUMMARY]
     
     ############################################################################
-        regions = {'Barkly': 'southern',
-            'Darwin': 'northern',
-            'Gulf': 'northern',
-            'Katherine': 'northern',
-            'Northern Alice Springs': 'southern',
-            'Plenty': 'southern',
-            'Roper': 'northern',
-            'Southern Alice Springs': 'southern',
-            'Sturt Plateau': 'northern',
-            'Tennant Creek': 'southern',
-            'V.R.D.': 'northern',
-            'Victoria River': 'northern'}
+        '''
+        scale_vals is a dictionary like: {'Northern Scale': [0, 1000, 2000, 3000], 'Southern Scale': [0, 250, 500, 1000]}
+        district regions is a dictionary like:
+        {'Darwin': 'Northern', 'Katherine': 'Northern', 'V.R.D.': 'Northern', 'Victoria River': 'Northern', 'Sturt Plateau': 'Northern', 'Roper': 'Northern', 'Gulf': 'Northern',
+        'Barkly': 'Southern', 'Tennant Creek': 'Southern', 'Northern Alice Springs': 'Southern', 'Plenty': 'Southern', 'Southern Alice Springs': 'Southern'}
+        '''
+        scale_vals, district_regions = self.parameterAsMatrix(parameters, self.CUSTOM_PARAMS, context)
+        northern_value_list = scale_vals['Northern Scale']
+        southern_value_list = scale_vals['Southern Scale']
+        
+
+        
     ############################################################################
     
         steps = 23
@@ -144,7 +154,7 @@ class TSDMSummary(QgsProcessingAlgorithm):
                 'Y_RESOLUTION':None,
                 'MULTITHREADING':False,
                 'OPTIONS':'',
-                'DATA_TYPE':0,
+                'DATA_TYPE':0,# Use input datatype (Float32)
                 'EXTRA':'',
                 'OUTPUT':'TEMPORARY_OUTPUT'}
                         
@@ -154,9 +164,9 @@ class TSDMSummary(QgsProcessingAlgorithm):
             results[f'tsdm_clipped_to_{district_name}'] = outputs[f'tsdm_clipped_to_{district_name}']['OUTPUT']
             
             ###Save TSDM (total) counts to tempory layer
-            region = regions[district_name]
+            region = district_regions[district_name]
             raster_1 = gdalnumeric.LoadFile(results[f'tsdm_clipped_to_{district_name}'])
-            counts_1 = self.tsdm_counts(raster_1, region)
+            counts_1 = self.tsdm_counts(raster_1, region, northern_value_list, southern_value_list)
             feat1 = QgsFeature()
             feat1.setAttributes([
                 district_name,
@@ -186,7 +196,7 @@ class TSDMSummary(QgsProcessingAlgorithm):
                 'Y_RESOLUTION':None,
                 'MULTITHREADING':False,
                 'OPTIONS':'',
-                'DATA_TYPE':6,
+                'DATA_TYPE':5,# Int32 (required for -999 nodata value)
                 'EXTRA':'',
                 'OUTPUT':'TEMPORARY_OUTPUT'}
                 
@@ -229,22 +239,34 @@ class TSDMSummary(QgsProcessingAlgorithm):
     
     #############Methods which return counts and percentages##################
         
-    def tsdm_counts(self, raster, region):
-        if region == 'northern':
+    def tsdm_counts(self, raster, region, northern_scale_vals, southern_scale_vals):
+        if region == 'Northern':
             # Northern Districts
-            low_count = ((raster >= 0)&(raster <= 1000)).sum()
-            low_moderate_count = ((raster > 1000)&(raster <= 2000)).sum()
-            moderate_count = ((raster > 2000)&(raster <= 3000)).sum()
-            high_count = (raster > 3000).sum()
-            #no_data_count = (raster == 0).sum()
+            northern_val_bottom = northern_scale_vals[0] #zero
+            northern_val_low = northern_scale_vals[1] # e.g. 1000
+            northern_val_mod = northern_scale_vals[2] # e.g. 2000
+            northern_val_high = northern_scale_vals[3] # e.g. 3000
+            
+            low_count = ((raster >= northern_val_bottom)&(raster <= northern_val_low)).sum()
+            low_moderate_count = ((raster > northern_val_low)&(raster <= northern_val_mod)).sum()
+            moderate_count = ((raster > northern_val_mod)&(raster <= northern_val_high)).sum()
+            high_count = (raster > northern_val_high).sum()
+            #water_count = (raster == -2).sum()
+            #no_data_count = (raster == -999).sum()
 
-        elif region == 'southern':
+        elif region == 'Southern':
             # Southern Districts
-            low_count = ((raster >= 0)&(raster <= 250)).sum()
-            low_moderate_count = ((raster > 250)&(raster <= 500)).sum()
-            moderate_count = ((raster > 500)&(raster <= 1000)).sum()
-            high_count = (raster > 1000).sum()
-            #no_data_count = (raster == 0).sum()
+            southern_val_bottom = southern_scale_vals[0] #zero
+            southern_val_low = southern_scale_vals[1] # e.g. 250
+            southern_val_mod = southern_scale_vals[2] # e.g. 500
+            southern_val_high = southern_scale_vals[3] # e.g. 1000
+            
+            low_count = ((raster >= southern_val_bottom)&(raster <= southern_val_low)).sum()
+            low_moderate_count = ((raster > southern_val_low)&(raster <= southern_val_mod)).sum()
+            moderate_count = ((raster > southern_val_mod)&(raster <= southern_val_high)).sum()
+            high_count = (raster > southern_val_high).sum()
+            #water_count = (raster == -2).sum()
+            #no_data_count = (raster == -999).sum()
 
         #total_pixel_count = sum([low_count, low_moderate_count, moderate_count, high_count, no_data_count])
         total_pixel_count = sum([low_count, low_moderate_count, moderate_count, high_count])
@@ -271,9 +293,9 @@ class TSDMSummary(QgsProcessingAlgorithm):
         below_average_count = ((raster >= 0)&(raster <= 30)).sum()
         average_count = ((raster > 30)&(raster <= 70)).sum()
         above_average_count = ((raster > 70)&(raster <= 100)).sum()
-        firescar_count = (raster == 253).sum()
-        water_count = (raster == 254).sum()
-        #no_data_count = (raster == 0).sum()
+        #firescar_count = (raster == 253).sum()
+        #water_count = (raster == 254).sum()
+        #no_data_count = (raster == -999).sum()
         
         total_tsdm_pcnt_classes = sum([below_average_count, average_count, above_average_count])
         
@@ -290,4 +312,107 @@ class TSDMSummary(QgsProcessingAlgorithm):
                 average_pcnt,
                 above_average_pcnt,
                 check_sum]
+                
+#############CUSTOM WIDGET WRAPPER##########################
+class CustomParametersWidgetWrapper(WidgetWrapper):
+
+    def createWidget(self):
+        self.cpw = CustomDistrictScaleWidget()
+        return self.cpw
         
+    def value(self):
+        scale_value_map = self.cpw.get_scale_cat_vals()
+        district_region_map = self.cpw.get_district_regions()
+        return [scale_value_map, district_region_map]
+
+######################CUSTOM WIDGET#################################
+                
+class CustomDistrictScaleWidget(QWidget):
+    def __init__(self):
+        super(CustomDistrictScaleWidget, self).__init__()
+        
+        self.scale_lbl = QLabel('Regional scale categories (edit table cells to use different values):', self)
+        
+        self.scale_map = {'Northern Scale': ['<1000', '1000-2000', '2000-3000', '>3000'],
+                            'Southern Scale': ['<250', '250-500', '500-1000', '>1000']}
+        
+        self.scale_tbl = QTableWidget(self)
+        self.scale_tbl.setColumnCount(5)
+        self.scale_tbl.setRowCount(len(self.scale_map))
+        self.scale_tbl.setHorizontalHeaderLabels(['Region Scale', 'Low', 'Low/moderate', 'Moderate', 'High'])
+        for i in range(self.scale_tbl.rowCount()):
+            row_items = [QTableWidgetItem(list(self.scale_map.keys())[i]),
+                        QTableWidgetItem(self.scale_map.get(list(self.scale_map.keys())[i])[0]),
+                        QTableWidgetItem(self.scale_map.get(list(self.scale_map.keys())[i])[1]),
+                        QTableWidgetItem(self.scale_map.get(list(self.scale_map.keys())[i])[2]),
+                        QTableWidgetItem(self.scale_map.get(list(self.scale_map.keys())[i])[3]),]
+            for j in range(self.scale_tbl.columnCount()):
+                self.scale_tbl.setItem(i, j, row_items[j])
+        self.scale_tbl.resizeColumnsToContents()
+        self.scale_tbl.setMaximumHeight(100)
+        
+        self.district_lbl = QLabel('District regions:', self)
+        
+        self.district_regions = ['Darwin', 'Katherine', 'V.R.D.', 'Sturt Plateau', 'Roper', 'Gulf',
+                                'Barkly', 'Tennant Creek', 'Northern Alice Springs', 'Plenty', 'Southern Alice Springs']
+        
+        self.district_tbl = QTableWidget(self)
+        self.district_tbl.setColumnCount(2)
+        self.district_tbl.setRowCount(len(self.district_regions))
+        self.district_tbl.setHorizontalHeaderLabels(['District', 'Regional Scale'])
+        for i in range(self.district_tbl.rowCount()):
+            cell_item = QTableWidgetItem(self.district_regions[i])
+            cell_widget = QComboBox(self)
+            cell_widget.addItems(['Northern', 'Southern'])
+            if i < 6:
+                cell_widget.setCurrentIndex(0)
+                cell_widget.setStyleSheet('Color: green')
+            else:
+                cell_widget.setCurrentIndex(1)
+                cell_widget.setStyleSheet('Color: orange')
+            cell_widget.currentTextChanged.connect(self.region_changed)
+            self.district_tbl.setItem(i, 0, cell_item)
+            self.district_tbl.setCellWidget(i, 1, cell_widget)
+        self.district_tbl.resizeColumnsToContents()
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.addWidget(self.scale_lbl)
+        self.layout.addWidget(self.scale_tbl)
+        self.layout.addWidget(self.district_lbl)
+        self.layout.addWidget(self.district_tbl)
+        # self.setMinimumWidth(800)
+        tbl_width = sum([self.scale_tbl.columnWidth(n) for n in range(self.scale_tbl.columnCount())])
+        self.setMinimumWidth(tbl_width+50)
+        
+    def region_changed(self):
+        for i in range(self.district_tbl.rowCount()):
+            cb = self.district_tbl.cellWidget(i, 1)
+            if cb.currentText() == 'Northern':
+                cb.setStyleSheet('Color: green')
+            elif cb.currentText() == 'Southern':
+                cb.setStyleSheet('Color: orange')
+                
+    def get_scale_cat_vals(self)->dict:
+        '''Here we get the cutoff values for the 4 bins, parsed from the
+        custon widget scale table'''
+        region_scales = {}
+        for r in range(self.scale_tbl.rowCount()):
+            cell_3 = self.scale_tbl.item(r, 2)
+            low_val = cell_3.text().split('-')[0]
+            mod_val = cell_3.text().split('-')[1]
+            cell_4 = self.scale_tbl.item(r, 4)
+            high_val = cell_4.text().split('>')[1]
+            region_scales[list(self.scale_map.keys())[r]] = [0, int(low_val), int(mod_val), int(high_val)]
+        return region_scales
+        
+    def get_district_regions(self)->dict:
+        '''Here we return a dictionary of each district and its associated
+        region from the custon widget district table'''
+        district_regions = {}
+        for r in range(self.district_tbl.rowCount()):
+            pastoral_district = self.district_tbl.item(r, 0).text()
+            region = self.district_tbl.cellWidget(r, 1).currentText()
+            district_regions[pastoral_district] = region
+            if pastoral_district == 'V.R.D.':
+                district_regions['Victoria River'] = region
+        return district_regions

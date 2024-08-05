@@ -149,7 +149,11 @@ class DailyMovementStats(QgsProcessingAlgorithm):
             # chronological order.
             date_feats_chronological = sorted(date_feats, key=lambda ft: ft[datetime_field])
             
-            date_points = [ft.geometry().asMultiPoint()[0] for ft in date_feats_chronological]# Geom is MultiPointXY; PointXY is 0th element
+            try:
+                date_points = [ft.geometry().asMultiPoint()[0] for ft in date_feats_chronological]# Geom is MultiPointXY; PointXY is 0th element
+            except TypeError:
+                date_points = [ft.geometry().asPoint() for ft in date_feats_chronological]
+            
             line_geom = QgsGeometry.fromPolylineXY(date_points)
             transformed_line_geom = self.transformed_geom(line_geom, src_crs, dest_crs, context.project())
             total_distance = round(transformed_line_geom.length()/1000, 3)
