@@ -1,4 +1,7 @@
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
+
+from qgis.PyQt.QtGui import QIcon
+
 from qgis.core import (QgsFeature, QgsFeatureRequest,
                         QgsProcessing, QgsProcessingAlgorithm,
                         QgsVectorLayer, QgsField, QgsFields,
@@ -11,6 +14,9 @@ from qgis.core import (QgsFeature, QgsFeatureRequest,
                         QgsProcessingMultiStepFeedback)
                         
 import processing
+
+import os
+
                        
 class TimePerWateredBand(QgsProcessingAlgorithm):
     PADDOCK = 'PADDOCK'
@@ -36,6 +42,9 @@ class TimePerWateredBand(QgsProcessingAlgorithm):
  
     def groupId(self):
         return "gps_collars"
+        
+    def icon(self):
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/collar_icon.png"))
  
     def shortHelpString(self):
         return "Calculate time spent in each band (e.g. 1000-1500m) of a Watered Bands\

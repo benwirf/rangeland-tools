@@ -1,4 +1,7 @@
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
+
+from qgis.PyQt.QtGui import QIcon
+
 from qgis.core import (QgsField, QgsFeature, QgsFeatureSink, QgsFeatureRequest,
                         QgsProcessing, QgsProcessingAlgorithm,
                         QgsProcessingParameterFeatureSource,
@@ -8,8 +11,13 @@ from qgis.core import (QgsField, QgsFeature, QgsFeatureSink, QgsFeatureRequest,
                         QgsProcessingParameterCrs, QgsCoordinateTransform,
                         QgsProcessingParameterFileDestination,
                         QgsVectorLayer)
+                        
 import processing
+
 import statistics
+
+import os
+
                        
 class DailyMovementStats(QgsProcessingAlgorithm):
     INPUT = 'INPUT'
@@ -34,6 +42,9 @@ class DailyMovementStats(QgsProcessingAlgorithm):
  
     def groupId(self):
         return "gps_collars"
+        
+    def icon(self):
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/collar_icon.png"))
  
     def shortHelpString(self):
         return "Calculate daily distance walked statistics and write results to\

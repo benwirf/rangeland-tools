@@ -1,4 +1,7 @@
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
+
+from qgis.PyQt.QtGui import QIcon
+
 from qgis.core import (QgsField, QgsFeature, QgsFeatureSink, QgsFeatureRequest,
                         QgsProcessing, QgsProcessingAlgorithm,
                         QgsProcessingParameterFeatureSource,
@@ -7,6 +10,8 @@ from qgis.core import (QgsField, QgsFeature, QgsFeatureSink, QgsFeatureRequest,
                         QgsProcessingParameterFeatureSink, QgsGeometry,
                         QgsProcessingParameterCrs, QgsCoordinateTransform,
                         QgsSpatialIndex)
+
+import os
 
                        
 class AddLandTypeAttribute(QgsProcessingAlgorithm):
@@ -34,6 +39,9 @@ class AddLandTypeAttribute(QgsProcessingAlgorithm):
     def shortHelpString(self):
         return "Add an attribute containing the land type in which the point\
         is located for each point in a gps collar layer"
+        
+    def icon(self):
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/collar_icon.png"))
          
     def helpUrl(self):
         return "https://qgis.org"

@@ -158,7 +158,10 @@ class FireRiskSummary(QgsProcessingAlgorithm):
         moderate_count = ((raster > 20)&(raster <= 30)).sum()
         high_count = ((raster > 30)&(raster <= 40)).sum()
         firescar_count = (raster == 253).sum()
-        water_count = (raster == 254).sum()
+        #water_count = (raster == 254).sum()
+        # Aussie products have changed
+        # Pixel values are now -2 to 253 (-2 water; 0 nodata; 253 firescars)
+        water_count = (raster == -2).sum()
         no_data_count = (raster == 0).sum()
         
         total_risk_classes = sum([low_count, moderate_count, high_count])

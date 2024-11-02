@@ -1,12 +1,18 @@
 from qgis.PyQt.QtCore import (QCoreApplication, QVariant)
+
+from qgis.PyQt.QtGui import QIcon
+
 from qgis.core import (QgsProcessing, QgsProcessingAlgorithm,
                         QgsProcessingParameterFile,
                         QgsProcessingParameterFeatureSource,
                         QgsProcessingParameterFolderDestination,
                         QgsFeatureRequest,
                         QgsProcessingMultiStepFeedback)
+                        
 import os
+
 import processing
+
                        
 class BatchClipPoints(QgsProcessingAlgorithm):
     INPUT_DIR = 'INPUT_DIR'
@@ -27,6 +33,9 @@ class BatchClipPoints(QgsProcessingAlgorithm):
  
     def groupId(self):
         return "gps_collars"
+        
+    def icon(self):
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/collar_icon.png"))
  
     def shortHelpString(self):
         return "Clip all raw GPS collar point GeoPackages in an input\

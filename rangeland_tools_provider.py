@@ -61,6 +61,8 @@ from Add_land_type_attribute import AddLandTypeAttribute
 from Time_per_dtw_bands import TimePerWateredBand
 from DTW_stats import DistanceToWaterStats
 from Filter_by_datetime import FilterByDateTime
+from Categorise_layer_from_csv import CategoriseLayerFromCsv
+from Export_color_map_to_csv import ExportColorMapToCsv
 
 iconPath = os.path.dirname(__file__)
 
@@ -112,7 +114,9 @@ class RangelandToolsProvider(QgsProcessingProvider):
                         AddLandTypeAttribute(),
                         TimePerWateredBand(),
                         DistanceToWaterStats(),
-                        FilterByDateTime()]
+                        FilterByDateTime(),
+                        CategoriseLayerFromCsv(),
+                        ExportColorMapToCsv()]
 
         for alg in self.alglist:
             self.addAlgorithm(alg)

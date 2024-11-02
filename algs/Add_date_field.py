@@ -1,17 +1,26 @@
 from processing.gui.wrappers import WidgetWrapper
+
 from qgis.PyQt.QtWidgets import (QWidget, QComboBox, QLabel, QPushButton,
                                 QTableWidget, QHBoxLayout, QTableWidgetItem,
                                 QVBoxLayout, QDialog)
+                                
 from qgis.PyQt.QtGui import QIcon
+
 from qgis.PyQt.QtCore import (QCoreApplication, Qt, QVariant, QDate, QRect)
+
 from qgis.core import (QgsField, QgsFeature, QgsFeatureSink, QgsFeatureRequest,
                         QgsFields, QgsProcessing, QgsProcessingAlgorithm,
                         QgsProcessingParameterFeatureSource,
                         QgsProcessingParameterField, QgsProject,
                         QgsProcessingParameterString,
                         QgsProcessingParameterFeatureSink)
+                        
 from qgis.utils import iface
+
 from datetime import datetime
+
+import os
+
                        
 class AddDateField(QgsProcessingAlgorithm):
     INPUT = 'INPUT'
@@ -33,6 +42,9 @@ class AddDateField(QgsProcessingAlgorithm):
  
     def groupId(self):
         return "gps_collars"
+        
+    def icon(self):
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/collar_icon.png"))
  
     def shortHelpString(self):
         return "Add a QDate field from a string field containing date/time information"

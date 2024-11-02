@@ -1,7 +1,12 @@
 from processing.gui.wrappers import WidgetWrapper
+
 from qgis.PyQt.QtCore import QCoreApplication, QVariant, QDateTime, Qt
+
 from qgis.PyQt.QtWidgets import (QWidget, QLabel, QDateTimeEdit,
                                     QVBoxLayout, QHBoxLayout)
+                                    
+from qgis.PyQt.QtGui import QIcon
+                                    
 from qgis.core import (QgsField, QgsFeature, QgsFeatureRequest,
                         QgsProcessing, QgsProcessingAlgorithm,
                         QgsProcessingParameterMatrix,
@@ -10,9 +15,14 @@ from qgis.core import (QgsField, QgsFeature, QgsFeatureRequest,
                         QgsProcessingParameterFileDestination,
                         QgsVectorLayer, QgsMapLayerProxyModel,
                         QgsFieldProxyModel)
+                        
 from qgis.gui import (QgsMapLayerComboBox, QgsFieldComboBox)
+
 import processing
+
 import statistics
+
+import os
                        
 class DistanceToWaterStats(QgsProcessingAlgorithm):
     INPUT_PARAMS = 'INPUT_PARAMS'
@@ -34,6 +44,9 @@ class DistanceToWaterStats(QgsProcessingAlgorithm):
  
     def groupId(self):
         return "gps_collars"
+        
+    def icon(self):
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/collar_icon.png"))
  
     def shortHelpString(self):
         return "Calculate daily distance to water statistics and write results\
