@@ -165,6 +165,8 @@ class CategoriseLayerFromCsv(QgsProcessingAlgorithm):
         # hack to work around ?bug where, if algorithm returns the NoThreading flag,
         # the dialog reverts to the Parameters tab instead of showing the Log tab with results
         alg_dlg = [d for d in iface.mainWindow().findChildren(QDialog)if d.objectName() == 'QgsProcessingDialogBase' and d.isVisible()]
+        if not alg_dlg:
+            return {}
         tab_widg = alg_dlg[0].findChildren(QTabWidget)
         current_tab = tab_widg[0].currentIndex()
         if current_tab == 0:
@@ -311,4 +313,5 @@ class ClassifyFromCsvWidget(QWidget):
             color_map[self.table_widget.item(i, uv_col_idx).text()] = self.table_widget.item(i, c_col_idx).text()
 
         return color_map
+
         
