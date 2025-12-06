@@ -162,8 +162,12 @@ class CategoriseLayerFromCsv(QgsProcessingAlgorithm):
         return {'Color Map': color_map}
         
     def postProcessAlgorithm(self, context, feedback):
-        # hack to work around ?bug where, if algorithm returns the NoThreading flag,
-        # the dialog reverts to the Parameters tab instead of showing the Log tab with results
+        """"
+        hack to work around issue where, if algorithm returns the NoThreading flag,
+        the dialog reverts to the Parameters tab instead of showing the Log tab with results
+        """
+        if not iface:
+            return {}
         alg_dlg = [d for d in iface.mainWindow().findChildren(QDialog)if d.objectName() == 'QgsProcessingDialogBase' and d.isVisible()]
         if not alg_dlg:
             return {}
@@ -315,3 +319,4 @@ class ClassifyFromCsvWidget(QWidget):
         return color_map
 
         
+
