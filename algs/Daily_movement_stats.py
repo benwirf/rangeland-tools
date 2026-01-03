@@ -184,16 +184,34 @@ class DailyMovementStats(QgsProcessingAlgorithm):
                                                                     src_crs,
                                                                     dest_crs,
                                                                     context.project())
+                # Ignore/skip time gaps less than 5 mins.
+                # Sometimes there are time gaps of zero or only a few seconds, with distances of a few km
+                # leading to outlandish max & average daily speeds (in the thousands of km/h)
+                if gap < 300:
+                    continue
                 day_time_gaps.append(gap)
                 day_distances.append(dist)
                 day_speeds.append(speed)
-            max_time_gap = round(max(day_time_gaps)/60, 1)# Divide by 60 to convert from seconds to minutes
-            min_dist = round(min(day_distances), 2)
-            max_dist = round(max(day_distances), 2)
-            mean_dist = round(statistics.mean(day_distances), 2)
-            min_speed = round(min(day_speeds), 2)
-            max_speed = round(max(day_speeds), 2)
-            mean_speed = round(statistics.mean(day_speeds), 2)
+            if not day_time_gaps:
+                max_time_gap = 0
+            else:
+                max_time_gap = round(max(day_time_gaps)/60, 1)# Divide by 60 to convert from seconds to minutes
+            if not day_distances:
+                min_dist = 0
+                max_dist = 0
+                mean_dist = 0
+            else:
+                min_dist = round(min(day_distances), 2)
+                max_dist = round(max(day_distances), 2)
+                mean_dist = round(statistics.mean(day_distances), 2)
+            if not day_speeds:
+                min_speed = 0
+                max_speed = 0
+                mean_speed = 0
+            else:
+                min_speed = round(min(day_speeds), 2)
+                max_speed = round(max(day_speeds), 2)
+                mean_speed = round(statistics.mean(day_speeds), 2)
             ########################################################################
             y = unique_date.year()
             m = unique_date.month()
@@ -255,6 +273,9 @@ class DailyMovementStats(QgsProcessingAlgorithm):
         ft1_dt = ft1[dt_fld]
         ft2_dt = ft2[dt_fld]
         delta_secs = ft1_dt.secsTo(ft2_dt)# Use method from QDateTime class
+        # Avoid division by zero error
+        if delta_secs <= 0:
+            return 0, -1, -1
         speed_meters_per_second = dist/delta_secs
         speed_kmh = speed_meters_per_second*3.6
         return delta_secs, dist, speed_kmh

@@ -8,7 +8,8 @@ from qgis.core import (NULL, QgsField, QgsFields, QgsFeature, QgsFeatureSink,
                         QgsProcessingParameterFeatureSink,
                         QgsGeometry, QgsSpatialIndex,
                         QgsCoordinateTransform, QgsWkbTypes,
-                        QgsProcessingMultiStepFeedback)
+                        QgsProcessingMultiStepFeedback,
+                        QgsVectorLayer)
                         
 import processing
 
@@ -107,7 +108,8 @@ class CarryingCapacitySummary(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterFileDestination(
             self.XL_SUMMARY,
             'Carrying capacity summary spreadsheet',
-            'Microsoft Excel (*.xlsx);;Open Document Spreadsheet (*.ods)'))
+            'Microsoft Excel (*.xlsx);;Open Document Spreadsheet (*.ods)',
+            optional=True))
     
     def checkParameterValues(self, parameters, context):
         wpts = self.parameterAsSource(parameters, self.WATERPOINTS, context)
@@ -193,7 +195,10 @@ class CarryingCapacitySummary(QgsProcessingAlgorithm):
                 flds.append(fld)
         
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
-                                               flds, QgsWkbTypes.MultiPolygon, lt_lyr.sourceCrs())
+                                               flds, QgsWkbTypes.MultiPolygon, lt_lyr.crs())
+        temp_output = QgsVectorLayer(f'MultiPolygon?crs={lt_lyr.crs().authid()}', '', 'memory')
+        temp_output.dataProvider().addAttributes(flds)
+        temp_output.updateFields()
                                                
 
         output_features = []
@@ -281,15 +286,22 @@ class CarryingCapacitySummary(QgsProcessingAlgorithm):
                     output_attributes.append(att)
                 
                 output_feat = QgsFeature(flds)
-                output_feat.setGeometry(lt_in_pdk)
+                
                 output_feat.setAttributes(output_attributes)
                 
+                if lt_in_pdk.wkbType() != QgsWkbTypes.MultiPolygon:
+                    coerced_geoms = lt_in_pdk.coerceToType(QgsWkbTypes.MultiPolygon)
+                    if coerced_geoms:
+                        lt_in_pdk = coerced_geoms[0]
+                    
                 if lt_in_pdk.wkbType() == QgsWkbTypes.MultiPolygon:
+                    output_feat.setGeometry(lt_in_pdk)
                     output_features.append(output_feat)
                 else:
                     feedback.reportError(f'1 feature with id:{output_feat.id()} cannot be added\
                                             to output layer due to non-matching geometry type')
                     feedback.pushInfo(repr(lt_in_pdk))
+                
                 ID+=1
                 # Calculate percentage at each iteration & set feedback progress
                 pcnt = ((ID-1)/total_feat_count)*100
@@ -297,15 +309,26 @@ class CarryingCapacitySummary(QgsProcessingAlgorithm):
                 
         step+=1
         
-        sink.addFeatures(output_features)
+        sink.addFeatures(output_features, QgsFeatureSink.FastInsert)
         
         results[self.OUTPUT] = dest_id
-
-        save_2_xlsx_params = {'LAYERS':[context.getMapLayer(dest_id)],
-            'USE_ALIAS':False,
-            'FORMATTED_VALUES':False,
-            'OUTPUT':dest_spreadsheet,
-            'OVERWRITE':True}
+        
+        ###*When saving output layer to a file location (not memory) dest_id is the file path not layer id!
+        output_layer = context.getMapLayer(dest_id)
+        if not output_layer:
+            temp_output.dataProvider().addFeatures(output_features)
+            save_2_xlsx_params = {'LAYERS':[temp_output],
+                'USE_ALIAS':False,
+                'FORMATTED_VALUES':False,
+                'OUTPUT':dest_spreadsheet,
+                'OVERWRITE':True}
+        
+        else:
+            save_2_xlsx_params = {'LAYERS':[output_layer],
+                'USE_ALIAS':False,
+                'FORMATTED_VALUES':False,
+                'OUTPUT':dest_spreadsheet,
+                'OVERWRITE':True}
         
         feedback.setCurrentStep(step)
         step+=1

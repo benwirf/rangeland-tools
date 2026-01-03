@@ -4,21 +4,22 @@ from qgis.PyQt.QtCore import (QCoreApplication, QVariant, Qt, QSize)
 from qgis.PyQt.QtGui import (QIcon, QFont)
 from qgis.PyQt.QtWidgets import (QWidget, QLabel, QCheckBox, QTableWidget, QDialog,
                                 QTableWidgetItem, QVBoxLayout, QHBoxLayout, QPushButton,
-                                QSpinBox, QGridLayout)
+                                QSpinBox, QGridLayout, QRadioButton, QDialogButtonBox)
 
 from qgis.core import (QgsProcessing, QgsProcessingAlgorithm, QgsProcessingParameterString,
                     QgsProcessingParameterVectorLayer, QgsProcessingParameterEnum,
                     QgsProcessingParameterBoolean, QgsProcessingParameterFolderDestination,
                     QgsProcessingParameterFile, QgsProcessingMultiStepFeedback, QgsMessageLog,
-                    QgsProcessingParameterMatrix, QgsMapLayerProxyModel)
+                    QgsProcessingParameterMatrix, QgsMapLayerProxyModel, QgsVectorLayer, NULL)
                     
-from qgis.gui import (QgsMapLayerComboBox, QgsFieldComboBox)
+from qgis.gui import (QgsMapLayerComboBox, QgsFieldComboBox, QgsFileWidget)
                     
 import processing
 import os
 import datetime
 import matplotlib.pyplot as plt
 import numpy as np
+import statistics
 #from scipy.interpolate import make_interp_spline
 
                   
@@ -60,8 +61,8 @@ class PastureGrowthGraphs(QgsProcessingAlgorithm):
         For part financial years, the graph will plot data for whichever months are present in the current FY folder.\
         If the custom Y-Axis properties table is not used, the upper tick on the Y-Axis will be 750 for southern districts\
         with a step of 250 and 2500 for northern districts with a step of 500. Alternatively, if the Set Custom Y-Axis Properties\
-        checkbox is checked, the table will be enabled, allowing full customisation of upper tick and step values\
-        for each district."
+        checkbox is checked, the table will be enabled, allowing full customisation of upper tick, step values and\
+        long term median value for each district."
  
     def helpUrl(self):
         return "https://qgis.org"
@@ -138,7 +139,7 @@ class PastureGrowthGraphs(QgsProcessingAlgorithm):
         district_layer = custom_param_array[0]
         district_name_field = custom_param_array[1]
         use_custom_y_axis_values = custom_param_array[2]
-        custom_y_axis_values = custom_param_array[3]# A dictionary {'Darwin': [2500, 500]} etc
+        custom_y_axis_values = custom_param_array[3]# A dictionary {'Darwin': [2500, 500, 2010]} etc
         
         #district_layer = self.parameterAsVectorLayer(parameters, self.DISTRICTS, context)
         
@@ -150,8 +151,11 @@ class PastureGrowthGraphs(QgsProcessingAlgorithm):
         
         months = ['January', 'February',  'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-        northern_district_medians = {'Darwin': 2010, 'Katherine': 2097, 'Victoria River': 1842, 'Sturt Plateau': 2031, 'Roper': 2215, 'Gulf': 2083}
-        southern_district_medians = {'Barkly': 664, 'Tennant Creek': 288, 'Northern Alice Springs': 495, 'Plenty': 328, 'Southern Alice Springs': 232}
+        #northern_district_medians = {'Darwin': 2010, 'Katherine': 2097, 'Victoria River': 1842, 'Sturt Plateau': 2031, 'Roper': 2215, 'Gulf': 2083}
+        #southern_district_medians = {'Barkly': 664, 'Tennant Creek': 288, 'Northern Alice Springs': 495, 'Plenty': 328, 'Southern Alice Springs': 232}
+        northern_districts = ['Darwin', 'Katherine', 'Victoria River', 'Sturt Plateau', 'Roper', 'Gulf']
+        southern_districts = ['Barkly', 'Tennant Creek', 'Northern Alice Springs', 'Plenty', 'Southern Alice Springs']
+
 ###################################################################################################
         fy_folders = []
 
@@ -159,7 +163,7 @@ class PastureGrowthGraphs(QgsProcessingAlgorithm):
         fy_folders.append((f"{int(fy.split(' ')[0].split('-')[0])-1}-{int(fy.split(' ')[0].split('-')[1])-1} FY"))
         fy_folders.append(fy)
 
-        all_districts = list(northern_district_medians.keys()) + list(southern_district_medians.keys())
+        all_districts = northern_districts + southern_districts
 
         district_results = [list() for i in range(11)]
         ############################################################################################
@@ -242,17 +246,20 @@ class PastureGrowthGraphs(QgsProcessingAlgorithm):
                 for f in context.getMapLayer(results['stats']).getFeatures():
                     for i, district in enumerate(all_districts):
                         if f[district_name_field].title() == district or (district == 'Victoria River' and f[district_name_field] == 'V.R.D.'):
+                            '''
                             if district in northern_district_medians.keys():
                                 long_term_median = northern_district_medians[district]
                             elif district in southern_district_medians.keys():
                                 long_term_median = southern_district_medians[district]
+                            '''
+                            long_term_median = custom_y_axis_values[district][2]
                             # Write all column values as a row/feature attributes
                             district_results[i].append([fyear, calendar_yr, mnth_name, f[district_name_field].title(), f['_mean'], long_term_median, f['_median']])
         
         for district_result in district_results:
             district_name = district_result[0][3]
             
-            if district_name in northern_district_medians.keys() or district_name == 'V.R.D.':
+            if district_name in northern_districts or district_name == 'V.R.D.':
                 region = 'Northern'
             else:
                 region = 'Southern'
@@ -402,8 +409,11 @@ class CustomDistrictGraphWidget(QWidget):
         self.tbl_lbl = QLabel('District Graph Y-Axis Properties', self)
         self.district_table = QTableWidget(self)
         self.district_table.setRowCount(1)
-        self.district_table.setColumnCount(3)
-        self.district_table.setHorizontalHeaderLabels(['District', 'Upper Tick', 'Step'])
+        self.district_table.setColumnCount(4)
+        self.district_table.setHorizontalHeaderLabels(['District', 'Upper Tick', 'Step', 'Long Term Median'])
+        #self.district_table.resizeColumnToContents(0)
+        for i in range(self.district_table.columnCount()):
+            self.district_table.setColumnWidth(i, 150)
         self.district_table.setEnabled(False)
         self.district_table.setMinimumHeight(375)
         
@@ -420,6 +430,13 @@ class CustomDistrictGraphWidget(QWidget):
         self.set_by_region_btn.setToolTip('Set Tick/Step by Region')
         self.set_by_region_btn.setEnabled(False)
         self.set_by_region_btn.clicked.connect(self.table_values_by_region)
+                
+        self.calc_median_btn = QPushButton(QIcon(os.path.join(os.path.dirname(__file__), "../icons/median.png")), '', self)
+        self.calc_median_btn.setFixedSize(QSize(40, 40))
+        self.calc_median_btn.setIconSize(QSize(35, 35))
+        self.calc_median_btn.setToolTip('Update long term district medians')
+        self.calc_median_btn.setEnabled(False)
+        self.calc_median_btn.clicked.connect(self.update_district_medians)
         
         self.table_checkbox.toggled.connect(self.checkbox_toggled)
         #self.name_fld_cb.fieldChanged.connect(self.populate_table)
@@ -438,6 +455,7 @@ class CustomDistrictGraphWidget(QWidget):
         btn_layout = QVBoxLayout(self)
         btn_layout.addWidget(self.set_by_region_btn)
         btn_layout.addWidget(self.reload_table_btn)
+        btn_layout.addWidget(self.calc_median_btn)
         btn_layout.addStretch()
         tbl_layout.addLayout(btn_layout)
         layout.addLayout(tbl_layout)
@@ -464,18 +482,35 @@ class CustomDistrictGraphWidget(QWidget):
             self.populate_table()
             self.set_by_region_btn.setEnabled(True)
             self.reload_table_btn.setEnabled(True)
+            self.calc_median_btn.setEnabled(True)
         else:
             self.district_table.clearContents()
             self.district_table.setRowCount(1)
             self.set_by_region_btn.setEnabled(False)
             self.reload_table_btn.setEnabled(False)
+            self.calc_median_btn.setEnabled(False)
                         
     def table_values_by_region(self):
-        self.dlg = SetByRegionDialog(self.district_table)
-        self.dlg.show()
+        self.region_dlg = SetByRegionDialog(self.district_table)
+        self.region_dlg.show()
+        
+    def update_district_medians(self):
+        self.median_dlg = UpdateMediansDialog(self.district_table)
+        self.median_dlg.show()
+        
+    def district_long_term_medians(self):
+        uri = os.path.join(os.path.dirname(__file__), "../data/DISTRICTS.gpkg")
+        data_lyr = QgsVectorLayer(uri, 'data', 'ogr')
+        current_medians = [ft['LONG_TERM_MEDIAN'] for ft in data_lyr.getFeatures()]
+        if any([i==NULL for i in current_medians]):
+            #current_medians = [ft['OLD_MEDIAN'] for ft in data_lyr.getFeatures()]
+            return {ft['NAME']:ft['OLD_MEDIAN'] for ft in data_lyr.getFeatures()}
+        else:
+            return {ft['NAME']:ft['LONG_TERM_MEDIAN'] for ft in data_lyr.getFeatures()}
     
     def populate_table(self):
         self.district_table.setRowCount(11)
+        distict_median_map = self.district_long_term_medians()
         item_map = {'Darwin':[2500, 500],
                     'Katherine':[2500, 500],
                     'Victoria River':[2500, 500],
@@ -489,10 +524,14 @@ class CustomDistrictGraphWidget(QWidget):
                     'Southern Alice Springs':[750, 250]}
         
         for row_idx, row_items in enumerate(item_map.items()):
-            row_data = [row_items[0], str(row_items[1][0]), str(row_items[1][1])]
+            district_name = row_items[0]
+            lt_median = distict_median_map[district_name]
+            row_data = [district_name, str(row_items[1][0]), str(row_items[1][1]), str(lt_median)]
             for col_idx, row_item in enumerate(row_data):
                 self.district_table.setItem(row_idx, col_idx, QTableWidgetItem(row_item))
-        self.district_table.resizeColumnToContents(0)
+        #self.district_table.resizeColumnToContents(0)
+        for i in range(self.district_table.columnCount()):
+            self.district_table.setColumnWidth(i, 150)
     
     def get_district_layer(self):
         return self.district_lyr_cb.currentLayer()
@@ -511,7 +550,9 @@ class CustomDistrictGraphWidget(QWidget):
             if self.district_table.item(row_idx, 0):
                 district_name = self.district_table.item(row_idx, 0).text()
                 if self.district_table.item(row_idx, 1) and self.district_table.item(row_idx, 2):
-                    axis_info = [int(self.district_table.item(row_idx, 1).text()), int(self.district_table.item(row_idx, 2).text())]
+                    axis_info = [int(self.district_table.item(row_idx, 1).text()),
+                                    int(self.district_table.item(row_idx, 2).text()),
+                                    int(self.district_table.item(row_idx, 3).text())]
                     y_props[district_name] = axis_info
         return y_props
 
@@ -598,5 +639,87 @@ class SetByRegionDialog(QDialog):
             row_data = [row_items[0], str(row_items[1][0]), str(row_items[1][1])]
             for col_idx, row_item in enumerate(row_data):
                 self.parent.setItem(row_idx, col_idx, QTableWidgetItem(row_item))
-        self.parent.resizeColumnToContents(0)
+        #self.parent.resizeColumnToContents(0)
+        
+class UpdateMediansDialog(QDialog):
+    
+    def __init__(self, parent=None):
+        self.parent = parent
+        super(UpdateMediansDialog, self).__init__()
+        self.layout = QVBoxLayout(self)
+        self.lbl1 = QLabel('Directory containing all yearly growth records:')
+        self.file_widget = QgsFileWidget(self)
+        self.file_widget.setStorageMode(QgsFileWidget.GetDirectory)
+        #self.file_widget_layout = QHBoxLayout(self)
+        self.layout.addWidget(self.lbl1)
+        self.layout.addWidget(self.file_widget)
+        #self.layout.addLayout(self.file_widget_layout)
+        self.lbl2 = QLabel('Select whether to use median or mean of total yearly growth pixels for each district')
+        self.layout.addWidget(self.lbl2)
+        self.rb_median = QRadioButton('Median', self)
+        self.rb_median.setChecked(True)
+        self.rb_mean = QRadioButton('Mean', self)
+        self.rb_layout = QHBoxLayout(self)
+        self.rb_layout.addWidget(self.rb_median)
+        self.rb_layout.addWidget(self.rb_mean)
+        self.layout.addLayout(self.rb_layout)
+        self.layout.addStretch()
+        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.button_box.accepted.connect(self.updateMedians)
+        self.button_box.rejected.connect(lambda: self.reject())
+        self.layout.addWidget(self.button_box)
+
+    def statsMethod(self):
+        if self.rb_median.isChecked():
+            return 'Median'
+        return 'Mean'
+        
+    def updateMedians(self):
+        if not self.parent or not isinstance(self.parent, QTableWidget):
+            return
+            
+        src_folder = self.file_widget.filePath()
+        
+        stats_method = self.statsMethod()
+        
+        uri = os.path.join(os.path.dirname(__file__), "../data/DISTRICTS.gpkg")
+        
+        district_lyr = QgsVectorLayer(uri, 'districts', 'ogr')
+        
+        districts = [ft['NAME'] for ft in district_lyr.getFeatures()]
+        
+        results_all_years = {}
+
+        for file in os.scandir(src_folder):
+            ext = file.name.split('.')[-1]
+            if ext != 'tiff':
+                continue
+            yr = file.name[:4]
+            input_file = os.path.join(src_folder, file.name)
+            dist_stats_params = {'INPUT':district_lyr,
+                                'INPUT_RASTER':input_file,
+                                'RASTER_BAND':1,
+                                'COLUMN_PREFIX':'_',
+                                'STATISTICS':[2,3],
+                                'OUTPUT':'TEMPORARY_OUTPUT'}
+            yr_district_stats = processing.run("native:zonalstatisticsfb", dist_stats_params)['OUTPUT']
+            yr_results = {}
+            for ft in yr_district_stats.getFeatures():
+                yr_results[ft['NAME']] = {'Mean': ft['_mean'], 'Median': ft['_median']}
+            results_all_years[yr] = yr_results
+
+        for district in districts:
+            district_yr_medians = []
+            for yr, yr_results in results_all_years.items():
+                district_yr_medians.append(yr_results[district][stats_method])
+            district_long_term_median = statistics.median(district_yr_medians)
+            #print(f'{district}: {district_long_term_median}')
+            # Update the table
+            tbl_rows = [i for i in range(self.parent.rowCount()) if self.parent.item(i, 0).text() == district]
+            if not tbl_rows:
+                continue
+            median_item = QTableWidgetItem(str(round(district_long_term_median)))
+            self.parent.setItem(tbl_rows[0], 3, median_item)
+            
+            
         

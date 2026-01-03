@@ -113,8 +113,11 @@ class CategoriseLayerFromCsv(QgsProcessingAlgorithm):
             return False, 'Could not create a valid color for the following CSV rows:\n'+ '\n'.join(incorrect_values)
         layer = self.parameterAsVectorLayer(parameters, self.LAYER, context)
         cat_fld = self.parameterAsFields(parameters, self.FIELD, context)[0]
-        cat_vals = [ft[cat_fld] for ft in layer.getFeatures()]
+        #cat_vals = [ft[cat_fld] for ft in layer.getFeatures()]
+        cat_fld_idx = layer.fields().lookupField(cat_fld)
+        cat_vals = layer.uniqueValues(cat_fld_idx)
         if sorted(cat_vals) != sorted(color_map.keys()):
+            context.feedback().pushInfo(f'Layer unique values:{repr(sorted(cat_vals))}; Color map keys:{repr(sorted(color_map.keys()))}')
             return False, 'CSV class values do not match unique values in selected layer field.'
         return super().checkParameterValues(parameters, context)
 
@@ -162,15 +165,9 @@ class CategoriseLayerFromCsv(QgsProcessingAlgorithm):
         return {'Color Map': color_map}
         
     def postProcessAlgorithm(self, context, feedback):
-        """"
-        hack to work around issue where, if algorithm returns the NoThreading flag,
-        the dialog reverts to the Parameters tab instead of showing the Log tab with results
-        """
-        if not iface:
-            return {}
+        # hack to work around ?bug where, if algorithm returns the NoThreading flag,
+        # the dialog reverts to the Parameters tab instead of showing the Log tab with results
         alg_dlg = [d for d in iface.mainWindow().findChildren(QDialog)if d.objectName() == 'QgsProcessingDialogBase' and d.isVisible()]
-        if not alg_dlg:
-            return {}
         tab_widg = alg_dlg[0].findChildren(QTabWidget)
         current_tab = tab_widg[0].currentIndex()
         if current_tab == 0:
@@ -249,11 +246,11 @@ class ClassifyFromCsvWidget(QWidget):
                 if self.rgb_string_is_valid(cell_text):
                     rgba_vals = cell_text.split(',')
                     q_color = QColor()
-                    q_color.setRed(rgba_vals[0])
-                    q_color.setGreen(rgba_vals[1])
-                    q_color.setBlue(rgba_vals[2])
+                    q_color.setRed(int(rgba_vals[0]))
+                    q_color.setGreen(int(rgba_vals[1]))
+                    q_color.setBlue(int(rgba_vals[2]))
                     if len(rgba_vals) == 4:
-                        q_color.setAlpha(rgba_vals[3])
+                        q_color.setAlpha(int(rgba_vals[3]))
                     color_col_idx = j
                     cell_brush = QBrush()
                     cell_brush.setStyle(Qt.SolidPattern)
@@ -317,6 +314,4 @@ class ClassifyFromCsvWidget(QWidget):
             color_map[self.table_widget.item(i, uv_col_idx).text()] = self.table_widget.item(i, c_col_idx).text()
 
         return color_map
-
         
-
