@@ -63,7 +63,10 @@ from DTW_stats import DistanceToWaterStats
 from Filter_by_datetime import FilterByDateTime
 from Categorise_layer_from_csv import CategoriseLayerFromCsv
 from Export_color_map_to_csv import ExportColorMapToCsv
-from Import_rgb_image_points import Import_RGB_Image_Points
+from Import_rgb_image_points import ImportRGBImagePoints
+from Import_ms_image_points import ImportMSImagePoints
+from Copy_rgb_images import CopyRGBImages
+from Copy_ms_images import CopyMSImages
 
 iconPath = os.path.dirname(__file__)
 
@@ -118,7 +121,10 @@ class RangelandToolsProvider(QgsProcessingProvider):
                         FilterByDateTime(),
                         CategoriseLayerFromCsv(),
                         ExportColorMapToCsv(),
-                        Import_RGB_Image_Points()]
+                        ImportRGBImagePoints(),
+                        ImportMSImagePoints(),
+                        CopyRGBImages(),
+                        CopyMSImages()]
 
         for alg in self.alglist:
             self.addAlgorithm(alg)

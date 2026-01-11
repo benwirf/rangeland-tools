@@ -38,11 +38,11 @@ from qgis.core import (QgsProcessing,
                         
 from PIL import Image
 from PIL.ExifTags import TAGS
-from PIL.ExifTags import GPSTAGS
+#from PIL.ExifTags import GPSTAGS
 
 import os
                        
-class ImportRGBImagePoints(QgsProcessingAlgorithm):
+class ImportMSImagePoints(QgsProcessingAlgorithm):
     INPUT_DIRS = 'INPUT_DIRS'
     OUTPUT = 'OUTPUT'
  
@@ -50,10 +50,10 @@ class ImportRGBImagePoints(QgsProcessingAlgorithm):
         super().__init__()
  
     def name(self):
-        return "importrgbimagepoints"
+        return "importmsimagepoints"
          
     def displayName(self):
-        return "Import RGB Image Points"
+        return "Import MS Image Points"
  
     def group(self):
         return "Drone Mapping"
@@ -62,8 +62,8 @@ class ImportRGBImagePoints(QgsProcessingAlgorithm):
         return "dronemapping"
  
     def shortHelpString(self):
-        return "Import raw RGB image locations from multiple DJI folders to a \
-        point layer using exif information stored in jpg images."
+        return "Import raw Multispectral image locations from multiple DJI folders to a \
+        point layer using exif information stored in TIF images."
  
     def helpUrl(self):
         return "https://qgis.org"
@@ -103,34 +103,39 @@ class ImportRGBImagePoints(QgsProcessingAlgorithm):
         ###################################################################
         out_feats = []
         cnt = 0
-        rgb_images = []
+        ms_images = []
         ###################################################################
-        feedback.pushInfo('Finding RGB jpg images')
+        feedback.pushInfo('Finding multispectral TIF images')
         for folder_path in input_dirs_list:
+            #feedback.pushInfo(repr(input_dirs_list))
             #folder_files = [file for file in os.scandir(folder_path)]
             if feedback.isCanceled():
                 break
             for f in os.scandir(folder_path):
                 if feedback.isCanceled():
                     break
-                if len(f.name.split('.')) < 2:
-                    continue
-                if f.name.split('.')[1] == 'JPG':
-                    rgb_images.append(f)
+                if len(f.name.split('.')) == 2 and f.name.split('.')[1] == 'TIF':
+                    ms_images.append(f)
                     
-        total_count = len(rgb_images)
+        total_count = len(ms_images)
+        #feedback.pushInfo(repr(total_count))
         if total_count:
-            feedback.pushInfo('Creating point features from RGB jpg image locations')
-            for rgb_img in rgb_images:
-                img_name = rgb_img.name.split('.')[0]
-                img_path = rgb_img.path
+            feedback.pushInfo('Creating point features from multispectral TIF image locations')
+            for ms_img in ms_images:
+                img_name = ms_img.name.split('.')[0]
+                img_path = ms_img.path
                 img=Image.open(img_path)
-                info_tup = self.get_exif_gps_info(img)
-                date_time = info_tup[0]
-                lat = info_tup[1]
-                lon = info_tup[2]
-                alt = info_tup[3]
                 
+                dt = [v for k, v in img.getexif().items() if TAGS.get(k) == 'DateTime']
+                if dt:
+                    dt = dt[0]
+                else:
+                    dt = ''
+                
+                info_tup = self.get_tif_gps_info(img)
+                lat = info_tup[0]
+                lon = info_tup[1]
+                alt = info_tup[2]
                 feat = QgsFeature(fields)
                 pt = QgsPoint()
                 pt.setX(lon)
@@ -138,7 +143,7 @@ class ImportRGBImagePoints(QgsProcessingAlgorithm):
                 pt.addZValue(alt)
                 geom = QgsGeometry(pt)
                 feat.setGeometry(geom)
-                feat.setAttributes([img_name, date_time, str(lat), str(lon), str(alt)])
+                feat.setAttributes([img_name, dt, str(lat), str(lon), str(alt)])
                 out_feats.append(feat)
                 img.close()
                 ###
@@ -150,38 +155,27 @@ class ImportRGBImagePoints(QgsProcessingAlgorithm):
             feedback.pushInfo('Adding point features to output layer')
             sink.addFeatures(out_feats, QgsFeatureSink.FastInsert)
         else:
-            feedback.pushWarning('No RGB images found')
+            feedback.pushWarning('No multispectral TIF images found')
         ###################################################################
         if context.willLoadLayerOnCompletion(dest_id):
             details = context.layerToLoadOnCompletionDetails(dest_id)
-            details.name = 'rgb_img_locations'
+            details.name = 'ms_img_locations'
             details.forceName = True
 
         return {self.INPUT_DIRS: input_dirs_list, self.OUTPUT: dest_id}
         
-    def get_exif_gps_info(self, image_file):
-        exif_table={}
+    def get_tif_gps_info(self, image_file):
         
-        for k, v in image_file._getexif().items():
-            tag=TAGS.get(k)
-            exif_table[tag]=v
-            
-        dt = exif_table['DateTime']
+        xmp_string = image_file.tag[700].decode()
 
-        gps_info={}
+        lat_string = xmp_string.split('GpsLatitude=')[1][2:14]
 
-        for k, v in exif_table['GPSInfo'].items():
-            geo_tag=GPSTAGS.get(k)
-            gps_info[geo_tag]=v
+        lon_string = xmp_string.split('GpsLongitude=')[1][2:15]
 
-        lat_dms = gps_info['GPSLatitude']
-        lon_dms = gps_info['GPSLongitude']
-        gps_alt = gps_info['GPSAltitude']
+        alt_string = xmp_string.split('AbsoluteAltitude=')[1][2:10].split('"')[0]
         
-        lat_dd = round(float((lat_dms[0])+(lat_dms[1]/60)+(lat_dms[2]/3600)), 8)
-        lon_dd = round(float((lon_dms[0])+(lon_dms[1]/60)+(lon_dms[2]/3600)), 8)
+        return (-float(lat_string), float(lon_string), float(alt_string))
         
-        return (dt, -lat_dd, lon_dd, gps_alt)
 
 # Widget Wrapper class
 class CustomParametersWidget(WidgetWrapper):

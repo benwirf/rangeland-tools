@@ -26,34 +26,28 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.core import (QgsProcessing,
                         QgsProcessingAlgorithm,
                         QgsProcessingParameterMatrix,
-                        QgsProcessingParameterFeatureSink,
-                        QgsFields,
-                        QgsField,
-                        QgsWkbTypes,
-                        QgsCoordinateReferenceSystem,
-                        QgsFeature,
-                        QgsPoint,
-                        QgsGeometry,
-                        QgsFeatureSink)
-                        
-from PIL import Image
-from PIL.ExifTags import TAGS
-from PIL.ExifTags import GPSTAGS
+                        QgsProcessingParameterFeatureSource,
+                        QgsProcessingParameterField,
+                        QgsProcessingParameterFolderDestination,
+                        QgsWkbTypes)
 
 import os
+import shutil
                        
-class ImportRGBImagePoints(QgsProcessingAlgorithm):
+class CopyRGBImages(QgsProcessingAlgorithm):
     INPUT_DIRS = 'INPUT_DIRS'
-    OUTPUT = 'OUTPUT'
+    POINT_LAYER = 'POINT_LAYER'
+    NAME_FIELD = 'NAME_FIELD'
+    DEST_FOLDER = 'DEST_FOLDER'
  
     def __init__(self):
         super().__init__()
  
     def name(self):
-        return "importrgbimagepoints"
+        return "copyrgbimages"
          
     def displayName(self):
-        return "Import RGB Image Points"
+        return "Copy RGB Images"
  
     def group(self):
         return "Drone Mapping"
@@ -62,8 +56,12 @@ class ImportRGBImagePoints(QgsProcessingAlgorithm):
         return "dronemapping"
  
     def shortHelpString(self):
-        return "Import raw RGB image locations from multiple DJI folders to a \
-        point layer using exif information stored in jpg images."
+        return "Copy raw RGB jpg images from multiple DJI folders to a \
+        separate folder ready for importing to photogrammetry software\
+        such as Agisoft or WebODM.\
+        \nNote: Input directories are not searched recursively. If no\
+        jpg images are found in the first level of source directories,\
+        no files will be copied."
  
     def helpUrl(self):
         return "https://qgis.org"
@@ -72,116 +70,65 @@ class ImportRGBImagePoints(QgsProcessingAlgorithm):
         return type(self)()
    
     def initAlgorithm(self, config=None):
-        input_dirs = QgsProcessingParameterMatrix(self.INPUT_DIRS, 'Input directories')
+        input_dirs = QgsProcessingParameterMatrix(self.INPUT_DIRS, 'Source directories')
         input_dirs.setMetadata({'widget_wrapper': {'class': CustomParametersWidget}})
         self.addParameter(input_dirs)
         
-        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, 'Output layer', QgsProcessing.TypeVectorPoint))
+        self.addParameter(QgsProcessingParameterFeatureSource(self.POINT_LAYER,
+                                                                'Point layer containing image locations/names',
+                                                                types=[QgsProcessing.TypeVectorPoint]))
+                                                                
+        self.addParameter(QgsProcessingParameterField(self.NAME_FIELD,
+                                                        'Field containing image name',
+                                                        parentLayerParameterName=self.POINT_LAYER,
+                                                        type=QgsProcessingParameterField.String))
+                                                        
+        self.addParameter(QgsProcessingParameterFolderDestination(self.DEST_FOLDER,
+                                                                    'Destination folder'))
         
 
     def processAlgorithm(self, parameters, context, feedback):
         # Retrieve the list of parameters returned by the custom widget wrapper
         input_dirs_list = self.parameterAsMatrix(parameters, self.INPUT_DIRS, context)
-
-        fields = QgsFields()
-
-        fields_to_add = [QgsField('Name', QVariant.String),
-                        QgsField('Time', QVariant.String),
-                        QgsField('Latitude', QVariant.Double, len=12, prec=8),
-                        QgsField('Longitude', QVariant.Double, len=12, prec=8),
-                        QgsField('Altitude', QVariant.Double, len=7, prec=3)]
-                        
-        for fld in fields_to_add:
-            fields.append(fld)
         
-        (sink, dest_id) = self.parameterAsSink(parameters,
-                                                self.OUTPUT,
-                                                context,
-                                                fields,
-                                                QgsWkbTypes.Point,
-                                                QgsCoordinateReferenceSystem('epsg:4326'))
-        ###################################################################
-        out_feats = []
+        point_layer = self.parameterAsSource(parameters, self.POINT_LAYER, context)
+        
+        name_fields = self.parameterAsFields(parameters, self.NAME_FIELD, context)#String list
+        fld_name = name_fields[0]
+        
+        dest_folder_path = self.parameterAsString(parameters, self.DEST_FOLDER, context)
+
+        subset_names = [ft[fld_name] for ft in point_layer.getFeatures()]
+        
         cnt = 0
-        rgb_images = []
-        ###################################################################
-        feedback.pushInfo('Finding RGB jpg images')
+        total_count = len(subset_names)
+        
         for folder_path in input_dirs_list:
-            #folder_files = [file for file in os.scandir(folder_path)]
             if feedback.isCanceled():
                 break
             for f in os.scandir(folder_path):
                 if feedback.isCanceled():
                     break
-                if len(f.name.split('.')) < 2:
+                if not 'JPG' in f.name:
                     continue
                 if f.name.split('.')[1] == 'JPG':
-                    rgb_images.append(f)
-                    
-        total_count = len(rgb_images)
-        if total_count:
-            feedback.pushInfo('Creating point features from RGB jpg image locations')
-            for rgb_img in rgb_images:
-                img_name = rgb_img.name.split('.')[0]
-                img_path = rgb_img.path
-                img=Image.open(img_path)
-                info_tup = self.get_exif_gps_info(img)
-                date_time = info_tup[0]
-                lat = info_tup[1]
-                lon = info_tup[2]
-                alt = info_tup[3]
-                
-                feat = QgsFeature(fields)
-                pt = QgsPoint()
-                pt.setX(lon)
-                pt.setY(lat)
-                pt.addZValue(alt)
-                geom = QgsGeometry(pt)
-                feat.setGeometry(geom)
-                feat.setAttributes([img_name, date_time, str(lat), str(lon), str(alt)])
-                out_feats.append(feat)
-                img.close()
-                ###
-                cnt += 1
-                pcnt = (cnt/total_count)*100
-                feedback.setProgress(round(pcnt, 5))
-            
-            #sink.addFeature(feat, QgsFeatureSink.FastInsert)
-            feedback.pushInfo('Adding point features to output layer')
-            sink.addFeatures(out_feats, QgsFeatureSink.FastInsert)
-        else:
+                    if f.name.split('.')[0] in subset_names:
+                        cnt+=1
+                        src = f.path
+                        shutil.copy2(src, dest_folder_path)
+                        pcnt = (cnt/total_count)*100
+                        feedback.setProgress(round(pcnt, 5))
+                                
+        if cnt == 0:
             feedback.pushWarning('No RGB images found')
-        ###################################################################
-        if context.willLoadLayerOnCompletion(dest_id):
-            details = context.layerToLoadOnCompletionDetails(dest_id)
-            details.name = 'rgb_img_locations'
-            details.forceName = True
+        else:
+            feedback.pushInfo(f'Copied {cnt} RGB images')
 
-        return {self.INPUT_DIRS: input_dirs_list, self.OUTPUT: dest_id}
+        return {'INPUT_DIRS': input_dirs_list,
+                'POINT_LAYER': point_layer,
+                'NAME_FIELD': fld_name,
+                'DEST_FOLDER': dest_folder_path}
         
-    def get_exif_gps_info(self, image_file):
-        exif_table={}
-        
-        for k, v in image_file._getexif().items():
-            tag=TAGS.get(k)
-            exif_table[tag]=v
-            
-        dt = exif_table['DateTime']
-
-        gps_info={}
-
-        for k, v in exif_table['GPSInfo'].items():
-            geo_tag=GPSTAGS.get(k)
-            gps_info[geo_tag]=v
-
-        lat_dms = gps_info['GPSLatitude']
-        lon_dms = gps_info['GPSLongitude']
-        gps_alt = gps_info['GPSAltitude']
-        
-        lat_dd = round(float((lat_dms[0])+(lat_dms[1]/60)+(lat_dms[2]/3600)), 8)
-        lon_dd = round(float((lon_dms[0])+(lon_dms[1]/60)+(lon_dms[2]/3600)), 8)
-        
-        return (dt, -lat_dd, lon_dd, gps_alt)
 
 # Widget Wrapper class
 class CustomParametersWidget(WidgetWrapper):
