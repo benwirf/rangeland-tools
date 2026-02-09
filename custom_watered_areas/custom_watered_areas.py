@@ -636,6 +636,10 @@ class CustomWateredAreasWidget(QWidget):
         dtw_band_lyr.dataProvider().addAttributes(dtw_band_flds)
         dtw_band_lyr.updateFields()
         
+        tgt_crs = dtw_band_lyr.crs()
+        wpt_crs = self.wp_lyr.crs()
+        pdk_crs = self.pdk_lyr.crs()
+        
         pdk_max_dtws = {}
 
         unnamed_pdk_count = 0
@@ -649,9 +653,10 @@ class CustomWateredAreasWidget(QWidget):
                 pdk_name = f'Unnamed Paddock {unnamed_pdk_count+1}'
                 unnamed_pdk_count+=1
             pdk = self.pdk_lyr.getFeature(pdk_id)
+            pdk_geom = self.transformed_geom(pdk.geometry(), pdk_crs, tgt_crs)
             pdk_area = round(pdk.geometry().area()/10000, 2)# Hectares
             wpt_ids = self.parse_waterpoints(ft['Water_pts'])
-            waterpoint_geoms = [wp.geometry() for wp in self.wp_lyr.getFeatures(wpt_ids)]
+            waterpoint_geoms = [self.transformed_geom(wp.geometry(), wpt_crs, tgt_crs) for wp in self.wp_lyr.getFeatures(wpt_ids)]
 #----------------------------
             if waterpoint_geoms:
                 buffer_distance = band_width
@@ -662,10 +667,10 @@ class CustomWateredAreasWidget(QWidget):
                 first_buffer = QgsGeometry.unaryUnion([geom.buffer(buffer_distance, 25) for geom in waterpoint_geoms])
                 # print(f'Band count: {band_count}')
                 if band_count == 0:
-                    if first_buffer.intersects(pdk.geometry()):
-                        clipped_to_pdk = first_buffer.intersection(pdk.geometry())
+                    if first_buffer.intersects(pdk_geom):
+                        clipped_to_pdk = first_buffer.intersection(pdk_geom)
                         area_ha = round(clipped_to_pdk.area()/10000, 2)
-                        pcnt = round((clipped_to_pdk.area()/pdk.geometry().area())*100, 7)
+                        pcnt = round((clipped_to_pdk.area()/pdk_geom.area())*100, 7)
                         feat = QgsFeature(dtw_band_flds)
                         feat.setGeometry(clipped_to_pdk)
                         feat.setAttributes([pdk_name, pdk_area, f'0-{buffer_distance}m', buffer_distance, area_ha, pcnt])
@@ -679,10 +684,10 @@ class CustomWateredAreasWidget(QWidget):
                     outer_ring = QgsGeometry.unaryUnion([geom.buffer(buffer_distance, 25) for geom in waterpoint_geoms])
                     inner_ring = QgsGeometry.unaryUnion([geom.buffer(buffer_distance-band_width, 25) for geom in waterpoint_geoms])
                     dtw_band = outer_ring.difference(inner_ring)
-                    if dtw_band.intersects(pdk.geometry()):
-                        clipped_to_pdk = dtw_band.intersection(pdk.geometry())
+                    if dtw_band.intersects(pdk_geom):
+                        clipped_to_pdk = dtw_band.intersection(pdk_geom)
                         area_ha = round(clipped_to_pdk.area()/10000, 2)
-                        pcnt = round((clipped_to_pdk.area()/pdk.geometry().area())*100, 7)
+                        pcnt = round((clipped_to_pdk.area()/pdk_geom.area())*100, 7)
                         feat = QgsFeature(dtw_band_flds)
                         feat.setGeometry(clipped_to_pdk)
                         feat.setAttributes([pdk_name,
