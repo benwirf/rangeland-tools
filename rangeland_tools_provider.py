@@ -67,6 +67,15 @@ from Import_rgb_image_points import ImportRGBImagePoints
 from Import_ms_image_points import ImportMSImagePoints
 from Copy_rgb_images import CopyRGBImages
 from Copy_ms_images import CopyMSImages
+from calculate_nbr import CalculateNBR
+from delta_nbr import DeltaNBR
+from extract_values_with_threshold import ExtractRasterWithThreshold
+from invert_raster import InvertRaster
+from merge_clip_scenes import BatchMergeAndClipScenes
+from stack_clip_bands import StackAndClipBands
+from set_band_descriptions import SetBandDescriptions
+from calculate_ndvi import CalculateNDVI
+from interpolate_temporal_points import InterpolateTemporalPoints
 
 iconPath = os.path.dirname(__file__)
 
@@ -124,7 +133,16 @@ class RangelandToolsProvider(QgsProcessingProvider):
                         ImportRGBImagePoints(),
                         ImportMSImagePoints(),
                         CopyRGBImages(),
-                        CopyMSImages()]
+                        CopyMSImages(),
+                        CalculateNBR(),
+                        DeltaNBR(),
+                        ExtractRasterWithThreshold(),
+                        InvertRaster(),
+                        BatchMergeAndClipScenes(),
+                        StackAndClipBands(),
+                        SetBandDescriptions(),
+                        CalculateNDVI(),
+                        InterpolateTemporalPoints()]
 
         for alg in self.alglist:
             self.addAlgorithm(alg)

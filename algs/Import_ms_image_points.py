@@ -60,6 +60,9 @@ class ImportMSImagePoints(QgsProcessingAlgorithm):
  
     def groupId(self):
         return "dronemapping"
+        
+    def icon(self):
+        return QIcon(os.path.join(os.path.dirname(__file__), "../icons/drone.png"))
  
     def shortHelpString(self):
         return "Import raw Multispectral image locations from multiple DJI folders to a \
